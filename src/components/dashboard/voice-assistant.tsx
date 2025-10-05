@@ -21,6 +21,10 @@ type Message = {
   timestamp: Date;
 };
 
+type Language = 'Urdu' | 'Punjabi' | 'Pashto' | 'Sindhi' | 'Balochi' | 'Siraiki';
+
+const supportedLanguages: Language[] = ['Urdu', 'Punjabi', 'Pashto', 'Sindhi', 'Balochi', 'Siraiki'];
+
 let messageIdCounter = 0;
 const getUniqueMessageId = () => {
   messageIdCounter += 1;
@@ -47,6 +51,7 @@ export default function VoiceAssistant() {
   const [inputText, setInputText] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>('Urdu');
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -127,6 +132,7 @@ export default function VoiceAssistant() {
       textQuery,
       audioDataUri,
       photoDataUri,
+      userLang: selectedLanguage,
     });
     
     setIsLoading(false);
@@ -332,10 +338,18 @@ export default function VoiceAssistant() {
                 </Button>
             </div>
              <div className="flex justify-center">
-                <div className="bg-slate-200 p-1 rounded-full flex text-sm font-medium text-slate-600">
-                    <button className="px-4 py-1 rounded-full bg-background text-primary shadow">Urdu</button>
-                    <button className="px-4 py-1 rounded-full">Punjabi</button>
-                    <button className="px-4 py-1 rounded-full">Pashto</button>
+                <div className="bg-slate-200 p-1 rounded-full flex text-sm font-medium text-slate-600 overflow-x-auto">
+                    {supportedLanguages.map(lang => (
+                         <button 
+                            key={lang}
+                            onClick={() => setSelectedLanguage(lang)}
+                            className={cn("px-4 py-1 rounded-full whitespace-nowrap", 
+                                selectedLanguage === lang ? "bg-background text-primary shadow" : ""
+                            )}
+                        >
+                            {lang}
+                        </button>
+                    ))}
                 </div>
             </div>
         </div>

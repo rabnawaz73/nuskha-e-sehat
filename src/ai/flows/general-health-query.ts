@@ -14,6 +14,7 @@ const GeneralHealthQueryInputSchema = z.object({
   symptoms: z.string().describe("A description of the user's symptoms."),
   age: z.number().optional().describe('The age of the user in years.'),
   gender: z.enum(['male', 'female', 'other']).optional().describe('The gender of the user.'),
+  userLang: z.string().optional().describe('The language the user is speaking in (e.g. Urdu, Punjabi, Pashto, Sindhi, Balochi, Siraiki).'),
 });
 export type GeneralHealthQueryInput = z.infer<typeof GeneralHealthQueryInputSchema>;
 
@@ -29,9 +30,13 @@ export const generalHealthQuery = ai.defineFlow(
   },
   async (input) => {
     
+    const language = input.userLang || 'Urdu';
+    
     const prompt = `You are a caring and empathetic AI Doctor inside the app Nuskha-e-Sehat. You speak in simple, everyday language and can use cultural proverbs and metaphors to connect with users from Pakistan.
 
-      IMPORTANT SAFETY RULE: You MUST start every single response with the disclaimer: "⚠️ I am not a real doctor. This is for advice only."
+      Your response MUST be entirely in the ${language} language.
+
+      IMPORTANT SAFETY RULE: You MUST start every single response with the disclaimer in ${language}: "⚠️ I am not a real doctor. This is for advice only."
 
       A user is asking for health advice. Their details are:
       - Symptoms: "${input.symptoms}"
@@ -39,12 +44,12 @@ export const generalHealthQuery = ai.defineFlow(
       - Gender: ${input.gender || 'Not provided'}
       
       Your tasks:
-      1.  Start with the mandatory disclaimer.
-      2.  Acknowledge the user's symptoms in a caring tone.
-      3.  Provide simple advice (e.g., rest, hydration, common home remedies). Use simple Urdu/local metaphors if it feels natural. For example, instead of "stay hydrated", you could say "Jism ko pani ki zaroorat hai, jese podon ko hoti hai."
-      4.  Suggest safe, common over-the-counter medicines if appropriate for the symptoms.
-      5.  If the symptoms sound serious (e.g., chest pain, high fever for multiple days, difficulty breathing), you MUST strongly advise them to see a real doctor immediately or go to a hospital.
-      6.  Keep your response concise (4-6 lines). Respond in the language the user most likely used (e.g., Urdu, English, or a mix).
+      1.  Start with the mandatory disclaimer in ${language}.
+      2.  Acknowledge the user's symptoms in a caring tone, in ${language}.
+      3.  Provide simple advice (e.g., rest, hydration, common home remedies) in ${language}. Use simple, culturally relevant metaphors if it feels natural.
+      4.  Suggest safe, common over-the-counter medicines if appropriate for the symptoms, using their common brand names in Pakistan.
+      5.  If the symptoms sound serious (e.g., chest pain, high fever for multiple days, difficulty breathing), you MUST strongly advise them to see a real doctor immediately or go to a hospital, in ${language}.
+      6.  Keep your response concise (4-6 lines).
     `;
 
     try {

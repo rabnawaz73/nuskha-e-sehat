@@ -45,6 +45,7 @@ const HealthAdvisorInputSchema = z.object({
     age: z.coerce.number().optional(),
     gender: z.enum(['male', 'female', 'other']).optional(),
   }).optional(),
+  userLang: z.string().optional(),
 });
 export type HealthAdvisorInput = z.infer<typeof HealthAdvisorInputSchema>;
 
@@ -217,14 +218,14 @@ export async function runHealthAdvisor(input: HealthAdvisorInput) {
           medicineUsage: identification.usage,
         });
 
-        const responseText = `⚠️ I am not a real doctor. This is for advice only. \n\nBased on my analysis of ${"identification.medicineName"} and your symptoms, here is my guidance. Authenticity: ${"authenticity.isFakeOrExpired" ? authenticity.reason : 'This medicine appears to be authentic and not expired.'}. Suitability: ${"guidance.suitability"}. Potential Side Effects: ${"guidance.sideEffects"}. Warnings: ${"guidance.warnings"}. ${"guidance.alternatives" ? `\nAlternatives: ${guidance.alternatives}`: ''}`;
+        const responseText = `⚠️ I am not a real doctor. This is for advice only. \n\nBased on my analysis of ${identification.medicineName} and your symptoms, here is my guidance. Authenticity: ${authenticity.isFakeOrExpired ? authenticity.reason : 'This medicine appears to be authentic and not expired.'}. Suitability: ${guidance.suitability}. Potential Side Effects: ${guidance.sideEffects}. Warnings: ${guidance.warnings}. ${guidance.alternatives ? `\nAlternatives: ${guidance.alternatives}`: ''}`;
         return {
             success: true,
             data: { text: responseText }
         }
       } else {
         // Subcase 1.2: Only photo provided. Identify and ask for more info.
-        const responseText = `I've identified the medicine as ${"identification.medicineName"}. Its purpose is ${"identification.usage"}. For personalized guidance, please tell me your symptoms.`;
+        const responseText = `I've identified the medicine as ${identification.medicineName}. Its purpose is ${identification.usage}. For personalized guidance, please tell me your symptoms.`;
         return {
             success: true,
             data: { text: responseText }
@@ -232,12 +233,18 @@ export async function runHealthAdvisor(input: HealthAdvisorInput) {
       }
     } else if (userQuery) {
       // Case 2: No photo, but symptoms are provided.
-      const responseText = await generalHealthQuery({
+      try {
+        const responseText = await generalHealthQuery({
           symptoms: userQuery,
           age: input.userDetails?.age,
           gender: input.userDetails?.gender,
-      });
-      return { success: true, data: { text: responseText } };
+          userLang: input.userLang
+        });
+         return { success: true, data: { text: responseText } };
+      } catch (e) {
+         console.error(e);
+        return { success: false, error: 'An unexpected error occurred.'}
+      }
 
     } else {
       // Case 3: No photo and no symptoms. (Should be handled by the check at the top)
