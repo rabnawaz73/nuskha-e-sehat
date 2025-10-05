@@ -30,9 +30,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  http: {
-    responseTimeout: 30000, // 30 seconds
-  },
 };
 
 export default nextConfig;
