@@ -28,7 +28,10 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
             audio.pause();
         } else {
             try {
-                audio.currentTime = 0;
+                if (!audio.src) {
+                    audio.src = voice.demoUrl;
+                    audio.load();
+                }
                 await audio.play();
             } catch (error) {
                 console.error("Audio playback error:", error);
@@ -82,7 +85,6 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
             </CardContent>
             <audio
                 ref={audioRef}
-                src={voice.demoUrl}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onEnded={() => setIsPlaying(false)}
