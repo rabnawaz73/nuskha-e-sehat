@@ -131,26 +131,7 @@ export default function VoiceAssistant() {
     
     let fullText = '';
     
-    if (response instanceof ReadableStream) {
-      const reader = response.getReader();
-      const decoder = new TextDecoder();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          fullText += decoder.decode(value, { stream: true });
-          setConversation(prev => prev.map(msg => 
-            msg.id === assistantMessageId ? { ...msg, text: fullText } : msg
-          ));
-        }
-      } catch (error) {
-          const errorText = error instanceof Error ? error.message : "An unexpected error occurred.";
-          fullText = errorText;
-           setConversation(prev => prev.map(msg =>
-            msg.id === assistantMessageId ? { ...msg, text: errorText, isStreaming: false } : msg
-          ));
-      }
-    } else if (response.success === false) {
+    if (response.success === false) {
         fullText = response.error || 'An unexpected error occurred.';
     } else if (response.success && response.data?.text) {
         fullText = response.data.text;

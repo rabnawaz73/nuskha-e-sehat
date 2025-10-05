@@ -26,9 +26,8 @@ export const generalHealthQuery = ai.defineFlow(
     name: 'generalHealthQuery',
     inputSchema: GeneralHealthQueryInputSchema,
     outputSchema: GeneralHealthQueryOutputSchema,
-    stream: true,
   },
-  async (input, streamingCallback) => {
+  async (input) => {
     
     const prompt = `You are a caring and empathetic AI Doctor inside the app Nuskha-e-Sehat. You speak in simple, everyday language and can use cultural proverbs and metaphors to connect with users from Pakistan.
 
@@ -51,7 +50,6 @@ export const generalHealthQuery = ai.defineFlow(
     try {
         const response = await ai.generate({
             prompt: prompt,
-            stream: streamingCallback,
         });
         
         return response.text;
