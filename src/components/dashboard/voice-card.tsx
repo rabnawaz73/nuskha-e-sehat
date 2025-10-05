@@ -18,7 +18,44 @@ interface VoiceCardProps {
 export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const audioRef = useRef<HTMLAudioElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+        // Create a new audio object when the component mounts or voice URL changes.
+        audioRef.current = new Audio(voice.demoUrl);
+        const audio = audioRef.current;
+
+        const onPlay = () => setIsPlaying(true);
+        const onPause = () => setIsPlaying(false);
+        const onEnded = () => setIsPlaying(false);
+        const onWaiting = () => setIsLoading(true);
+        const onCanPlay = () => setIsLoading(false);
+        const onError = () => {
+            setIsLoading(false);
+            setIsPlaying(false);
+            // Optionally, you can add a toast notification here to inform the user.
+            console.error(`Error loading audio for voice: ${voice.name}`);
+        };
+
+        audio.addEventListener('play', onPlay);
+        audio.addEventListener('pause', onPause);
+        audio.addEventListener('ended', onEnded);
+        audio.addEventListener('waiting', onWaiting);
+        audio.addEventListener('canplay', onCanPlay);
+        audio.addEventListener('error', onError);
+
+        // Cleanup function: This is crucial to prevent memory leaks and errors.
+        return () => {
+            audio.pause(); // Stop any playback.
+            audio.removeEventListener('play', onPlay);
+            audio.removeEventListener('pause', onPause);
+            audio.removeEventListener('ended', onEnded);
+            audio.removeEventListener('waiting', onWaiting);
+            audio.removeEventListener('canplay', onCanPlay);
+            audio.removeEventListener('error', onError);
+            audioRef.current = null;
+        };
+    }, [voice.demoUrl, voice.name]); // Re-run this effect if the audio URL changes.
 
     const handlePlayPause = async () => {
         if (!audioRef.current) return;
@@ -27,39 +64,17 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
             audioRef.current.pause();
         } else {
             try {
+                // Reset currentTime to play from the beginning each time.
+                audioRef.current.currentTime = 0;
                 await audioRef.current.play();
             } catch (error) {
                 console.error("Audio playback error:", error);
-                // The play() request was interrupted. This is common.
-                // We can often ignore it as the user's intent (e.g., navigating away) is handled.
+                // The play() request can be interrupted, which is a common browser behavior.
+                // We catch it to prevent the app from crashing.
+                setIsPlaying(false);
             }
         }
     };
-
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
-        const onEnded = () => setIsPlaying(false);
-        const onWaiting = () => setIsLoading(true);
-        const onCanPlay = () => setIsLoading(false);
-
-        audio.addEventListener('play', onPlay);
-        audio.addEventListener('pause', onPause);
-        audio.addEventListener('ended', onEnded);
-        audio.addEventListener('waiting', onWaiting);
-        audio.addEventListener('canplay', onCanPlay);
-
-        return () => {
-            audio.removeEventListener('play', onPlay);
-            audio.removeEventListener('pause', onPause);
-            audio.removeEventListener('ended', onEnded);
-            audio.removeEventListener('waiting', onWaiting);
-            audio.removeEventListener('canplay', onCanPlay);
-        };
-    }, []);
 
     return (
         <Card className={cn("flex flex-col", isSelected && "border-primary ring-2 ring-primary")}>
@@ -104,7 +119,7 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
                     {isSelected ? 'Currently Selected' : 'Select this Voice'}
                 </Button>
             </CardContent>
-            <audio ref={audioRef} src={voice.demoUrl} preload="none" className="hidden" />
+            {/* The audio element is now managed entirely within the useEffect hook and doesn't need to be in the DOM. */}
         </Card>
     );
 }
