@@ -91,4 +91,23 @@ export const mockVoices: Voice[] = [
         qualityScore: 8.4,
         demoUrl: 'https://storage.googleapis.com/studioprod-51147.appspot.com/assets/tts-samples/pa_male_01.wav',
     },
+     // Siraiki Voices (using Punjabi as a stand-in for demo audio)
+    {
+        id: 'v_sk_khwaja',
+        name: 'Khwaja',
+        language: 'Siraiki',
+        provider: 'Google AI',
+        qualityScore: 8.6,
+        demoUrl: 'https://storage.googleapis.com/studioprod-51147.appspot.com/assets/tts-samples/pa_male_01.wav',
+    },
+
+    // Balochi Voices (using Pashto as a stand-in for demo audio)
+     {
+        id: 'v_ba_hambal',
+        name: 'Hambal',
+        language: 'Balochi',
+        provider: 'Uplift AI',
+        qualityScore: 8.3,
+        demoUrl: 'https://storage.googleapis.com/studioprod-51147.appspot.com/assets/tts-samples/ps_male_01.wav',
+    },
 ];
