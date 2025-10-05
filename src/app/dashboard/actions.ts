@@ -19,7 +19,8 @@ import { generalHealthQuery } from '@/ai/flows/general-health-query';
 import { getMedicineFoodInteraction } from '@/ai/flows/get-medicine-food-interaction';
 import type { MedicineFoodInteractionInput } from '@/ai/types/medicine-food-interaction';
 import { coughAnalysisFlow } from '@/ai/flows/cough-analysis-flow';
-import { debateFlow, type DebateInput } from '@/ai/flows/debate-flow';
+import { debateFlow } from '@/ai/flows/debate-flow';
+import type { DebateInput } from '@/ai/types/debate';
 import { detectEmotion } from '@/ai/flows/detect-emotion-flow';
 import { getMoodAdviceFlow } from '@/ai/flows/get-mood-advice-flow';
 import type { DetectEmotionInput, GetMoodAdviceInput } from '@/ai/types/emotion';
@@ -113,15 +114,7 @@ export async function getMedicineGuide(formData: FormData) {
 
     // Case 3: Only symptoms provided
     if (symptoms) {
-        try {
-            return await generalHealthQuery({symptoms, age, gender});
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred while getting your health recommendation.';
-             return {
-                success: false,
-                error: errorMessage,
-            };
-        }
+        return generalHealthQuery({symptoms, age, gender});
     }
 
     // Should not be reached due to initial check
@@ -235,19 +228,11 @@ export async function runHealthAdvisor(input: HealthAdvisorInput) {
       }
     } else if (userQuery) {
       // Case 2: No photo, but symptoms are provided.
-      try {
-        return await generalHealthQuery({
-            symptoms: userQuery,
-            age: input.userDetails?.age,
-            gender: input.userDetails?.gender,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred while getting your health recommendation.';
-         return {
-            success: false,
-            error: errorMessage,
-        };
-      }
+      return generalHealthQuery({
+          symptoms: userQuery,
+          age: input.userDetails?.age,
+          gender: input.userDetails?.gender,
+      });
 
     } else {
       // Case 3: No photo and no symptoms. (Should be handled by the check at the top)

@@ -144,7 +144,7 @@ export default function VoiceAssistant() {
           ));
         }
       } catch (error) {
-          const errorText = error instanceof Error ? error.message : "Failed to get guidance from the assistant.";
+          const errorText = error instanceof Error ? error.message : "An unexpected error occurred.";
           fullText = errorText;
            setConversation(prev => prev.map(msg =>
             msg.id === assistantMessageId ? { ...msg, text: errorText, isStreaming: false } : msg
