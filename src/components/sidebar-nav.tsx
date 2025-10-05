@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Users,
   BrainCircuit,
+  Sparkles,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -30,6 +31,7 @@ const links = [
   { href: '/dashboard/safety-check', label: 'Safety Check', icon: ShieldCheck },
   { href: '/dashboard/food-guide', label: 'Food Guide', icon: CookingPot },
   { href: '/dashboard/mood-tracker', label: 'Mood Tracker', icon: BrainCircuit },
+  { href: '/dashboard/voice-library', label: 'Voice Library', icon: Sparkles },
   { href: '/dashboard/pharmacies', label: 'Find Pharmacies', icon: Store },
   { href: '/dashboard/learn', label: 'Learn', icon: BookOpen },
   { href: '/dashboard/emergency', label: 'Emergency Help', icon: AlertCircle },

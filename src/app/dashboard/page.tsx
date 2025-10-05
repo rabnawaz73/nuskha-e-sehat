@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit } from "lucide-react";
+import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const features = [
@@ -27,6 +27,13 @@ const features = [
     icon: ShieldCheck,
     cta: "Run Safety Check",
     primary: true,
+  },
+   {
+    title: "Voice Library",
+    description: "Choose the AI voice you prefer for your language.",
+    href: "/dashboard/voice-library",
+    icon: Sparkles,
+    cta: "Choose a Voice",
   },
   {
     title: "Cough Analysis",
