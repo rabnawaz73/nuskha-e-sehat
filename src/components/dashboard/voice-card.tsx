@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Loader2, CheckCircle, Star } from "lucide-react";
@@ -20,57 +20,18 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
     const [isLoading, setIsLoading] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    useEffect(() => {
-        // Create a new audio object when the component mounts or voice URL changes.
-        audioRef.current = new Audio(voice.demoUrl);
-        const audio = audioRef.current;
-
-        const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
-        const onEnded = () => setIsPlaying(false);
-        const onWaiting = () => setIsLoading(true);
-        const onCanPlay = () => setIsLoading(false);
-        const onError = () => {
-            setIsLoading(false);
-            setIsPlaying(false);
-            // Optionally, you can add a toast notification here to inform the user.
-            console.error(`Error loading audio for voice: ${voice.name}`);
-        };
-
-        audio.addEventListener('play', onPlay);
-        audio.addEventListener('pause', onPause);
-        audio.addEventListener('ended', onEnded);
-        audio.addEventListener('waiting', onWaiting);
-        audio.addEventListener('canplay', onCanPlay);
-        audio.addEventListener('error', onError);
-
-        // Cleanup function: This is crucial to prevent memory leaks and errors.
-        return () => {
-            audio.pause(); // Stop any playback.
-            audio.removeEventListener('play', onPlay);
-            audio.removeEventListener('pause', onPause);
-            audio.removeEventListener('ended', onEnded);
-            audio.removeEventListener('waiting', onWaiting);
-            audio.removeEventListener('canplay', onCanPlay);
-            audio.removeEventListener('error', onError);
-            audioRef.current = null;
-        };
-    }, [voice.demoUrl, voice.name]); // Re-run this effect if the audio URL changes.
-
     const handlePlayPause = async () => {
-        if (!audioRef.current) return;
+        const audio = audioRef.current;
+        if (!audio) return;
 
         if (isPlaying) {
-            audioRef.current.pause();
+            audio.pause();
         } else {
             try {
-                // Reset currentTime to play from the beginning each time.
-                audioRef.current.currentTime = 0;
-                await audioRef.current.play();
+                audio.currentTime = 0;
+                await audio.play();
             } catch (error) {
                 console.error("Audio playback error:", error);
-                // The play() request can be interrupted, which is a common browser behavior.
-                // We catch it to prevent the app from crashing.
                 setIsPlaying(false);
             }
         }
@@ -119,7 +80,22 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
                     {isSelected ? 'Currently Selected' : 'Select this Voice'}
                 </Button>
             </CardContent>
-            {/* The audio element is now managed entirely within the useEffect hook and doesn't need to be in the DOM. */}
+            <audio
+                ref={audioRef}
+                src={voice.demoUrl}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+                onWaiting={() => setIsLoading(true)}
+                onCanPlay={() => setIsLoading(false)}
+                onError={(e) => {
+                    console.error(`Error loading audio for voice: ${voice.name}`, e);
+                    setIsLoading(false);
+                    setIsPlaying(false);
+                }}
+                preload="none"
+                className="hidden"
+            />
         </Card>
     );
 }
