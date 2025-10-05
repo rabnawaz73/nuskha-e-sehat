@@ -114,7 +114,11 @@ export async function getMedicineGuide(formData: FormData) {
 
     // Case 3: Only symptoms provided
     if (symptoms) {
-        return generalHealthQuery({symptoms, age, gender});
+        const responseText = await generalHealthQuery({symptoms, age, gender});
+        return {
+          success: true,
+          data: { text: responseText }
+        };
     }
 
     // Should not be reached due to initial check
@@ -228,11 +232,12 @@ export async function runHealthAdvisor(input: HealthAdvisorInput) {
       }
     } else if (userQuery) {
       // Case 2: No photo, but symptoms are provided.
-      return generalHealthQuery({
+      const responseText = await generalHealthQuery({
           symptoms: userQuery,
           age: input.userDetails?.age,
           gender: input.userDetails?.gender,
       });
+      return { success: true, data: { text: responseText } };
 
     } else {
       // Case 3: No photo and no symptoms. (Should be handled by the check at the top)

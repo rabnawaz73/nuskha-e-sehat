@@ -129,23 +129,22 @@ export default function VoiceAssistant() {
       photoDataUri,
     });
     
-    let fullText = '';
-    
-    if (response.success === false) {
-        fullText = response.error || 'An unexpected error occurred.';
-    } else if (response.success && response.data?.text) {
-        fullText = response.data.text;
-    } else {
-        fullText = 'An unexpected error occurred.';
-    }
-    
     setIsLoading(false);
-    const finalMessage = { id: assistantMessageId, role: 'assistant', text: fullText, isStreaming: false, timestamp: new Date() };
-    setConversation(prev => prev.map(msg => 
-      msg.id === assistantMessageId ? finalMessage : msg
-    ));
-    if (!fullText.toLowerCase().includes('error')) {
-      handlePlayAudio(finalMessage);
+    
+    if (response.success && response.data?.text) {
+      const fullText = response.data.text;
+      const finalMessage = { id: assistantMessageId, role: 'assistant', text: fullText, isStreaming: false, timestamp: new Date() };
+      setConversation(prev => prev.map(msg => 
+        msg.id === assistantMessageId ? finalMessage : msg
+      ));
+      if (!fullText.toLowerCase().includes('error')) {
+        handlePlayAudio(finalMessage);
+      }
+    } else {
+      const errorText = response.error || 'An unexpected error occurred.';
+      setConversation(prev => prev.map(msg => 
+        msg.id === assistantMessageId ? { ...msg, text: errorText, isStreaming: false } : msg
+      ));
     }
   }
 
