@@ -20,13 +20,19 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
     const [isLoading, setIsLoading] = useState(false);
     const audioRef = useRef<HTMLAudioElement>(null);
 
-    const handlePlayPause = () => {
+    const handlePlayPause = async () => {
         if (!audioRef.current) return;
 
         if (isPlaying) {
             audioRef.current.pause();
         } else {
-            audioRef.current.play();
+            try {
+                await audioRef.current.play();
+            } catch (error) {
+                console.error("Audio playback error:", error);
+                // The play() request was interrupted. This is common.
+                // We can often ignore it as the user's intent (e.g., navigating away) is handled.
+            }
         }
     };
 
