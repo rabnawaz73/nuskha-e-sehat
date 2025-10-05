@@ -114,7 +114,7 @@ export async function getMedicineGuide(formData: FormData) {
     // Case 3: Only symptoms provided
     if (symptoms) {
         try {
-            return generalHealthQuery({symptoms, age, gender});
+            return await generalHealthQuery({symptoms, age, gender});
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred while getting your health recommendation.';
              return {
@@ -235,11 +235,19 @@ export async function runHealthAdvisor(input: HealthAdvisorInput) {
       }
     } else if (userQuery) {
       // Case 2: No photo, but symptoms are provided.
-      return generalHealthQuery({
-          symptoms: userQuery,
-          age: input.userDetails?.age,
-          gender: input.userDetails?.gender,
-      });
+      try {
+        return await generalHealthQuery({
+            symptoms: userQuery,
+            age: input.userDetails?.age,
+            gender: input.userDetails?.gender,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred while getting your health recommendation.';
+         return {
+            success: false,
+            error: errorMessage,
+        };
+      }
 
     } else {
       // Case 3: No photo and no symptoms. (Should be handled by the check at the top)
