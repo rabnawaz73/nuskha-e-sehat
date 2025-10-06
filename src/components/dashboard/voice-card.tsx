@@ -27,15 +27,17 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
         if (isPlaying) {
             audio.pause();
         } else {
+            setIsLoading(true);
             try {
-                if (!audio.src) {
+                if (audio.src !== voice.demoUrl) {
                     audio.src = voice.demoUrl;
                     audio.load();
                 }
                 await audio.play();
             } catch (error) {
                 console.error("Audio playback error:", error);
-                setIsPlaying(false);
+                setIsLoading(false);
+                // Optionally, add a toast to inform the user about the error
             }
         }
     };
@@ -85,7 +87,12 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
             </CardContent>
             <audio
                 ref={audioRef}
-                onPlay={() => setIsPlaying(true)}
+                src={voice.demoUrl}
+                preload="none"
+                onPlay={() => {
+                    setIsPlaying(true);
+                    setIsLoading(false);
+                }}
                 onPause={() => setIsPlaying(false)}
                 onEnded={() => setIsPlaying(false)}
                 onWaiting={() => setIsLoading(true)}
@@ -95,7 +102,6 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
                     setIsLoading(false);
                     setIsPlaying(false);
                 }}
-                preload="none"
                 className="hidden"
             />
         </Card>
