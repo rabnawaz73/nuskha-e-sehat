@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Settings } from "lucide-react";
+import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Settings, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const features = [
@@ -11,6 +11,14 @@ const features = [
     href: "/dashboard/assistant",
     icon: Mic,
     cta: "Ask Assistant",
+    primary: true,
+  },
+  {
+    title: "Health Timeline",
+    description: "View your health history, symptoms, and AI insights in one place.",
+    href: "/dashboard/timeline",
+    icon: CalendarDays,
+    cta: "View Timeline",
     primary: true,
   },
    {
@@ -26,14 +34,6 @@ const features = [
     href: "/dashboard/safety-check",
     icon: ShieldCheck,
     cta: "Run Safety Check",
-    primary: true,
-  },
-   {
-    title: "Settings",
-    description: "Customize your profile, voice preferences, and more.",
-    href: "/dashboard/settings",
-    icon: Settings,
-    cta: "Go to Settings",
   },
   {
     title: "Cough Analysis",
@@ -78,6 +78,13 @@ const features = [
     cta: "Learn More",
   },
   {
+    title: "Settings",
+    description: "Customize your profile, voice preferences, and more.",
+    href: "/dashboard/settings",
+    icon: Settings,
+    cta: "Go to Settings",
+  },
+  {
     title: "Emergency Help",
     description: "Quick access to emergency helplines and your SOS settings.",
     href: "/dashboard/emergency",
@@ -95,12 +102,16 @@ export default function DashboardPage() {
         <p className="text-muted-foreground text-lg">How can we help you today?</p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {features.map((feature, index) => (
           <Card 
             key={feature.title} 
             className={cn(
               "flex flex-col transform transition-transform hover:scale-[1.02] hover:shadow-lg",
+               // Make the top 2 items span 2 columns on lg screens
+              index < 2 && "lg:col-span-2",
+               // Make the top item span 2 columns on xl screens
+              index < 1 && "xl:col-span-2",
             )}
           >
             <CardHeader>

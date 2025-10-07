@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   Users,
   BrainCircuit,
-  Settings, // Replaced Sparkles with Settings
+  Settings,
+  CalendarDays,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -25,6 +26,7 @@ import {
 const links = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/dashboard/assistant', label: 'AI Voice Assistant', icon: Mic },
+  { href: '/dashboard/timeline', label: 'Health Timeline', icon: CalendarDays },
   { href: '/dashboard/scan', label: 'Scan Medicine', icon: Scan },
   { href: '/dashboard/debate', label: 'AI Debate', icon: Users },
   { href: '/dashboard/cough-detector', label: 'Cough Detector', icon: Waves },
@@ -33,7 +35,7 @@ const links = [
   { href: '/dashboard/mood-tracker', label: 'Mood Tracker', icon: BrainCircuit },
   { href: '/dashboard/pharmacies', label: 'Find Pharmacies', icon: Store },
   { href: '/dashboard/learn', label: 'Learn', icon: BookOpen },
-  { href: '/dashboard/settings', label: 'Settings', icon: Settings }, // Changed link
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
   { href: '/dashboard/emergency', label: 'Emergency Help', icon: AlertCircle },
 ];
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Loader2, CheckCircle, Star } from "lucide-react";
@@ -20,25 +20,62 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
     const [isLoading, setIsLoading] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    const handlePlayPause = async () => {
+    useEffect(() => {
+        // Create audio element on mount
+        audioRef.current = new Audio(voice.demoUrl);
+        audioRef.current.preload = 'none';
+
+        const audio = audioRef.current;
+
+        const handlePlay = () => {
+            setIsPlaying(true);
+            setIsLoading(false);
+        };
+        const handlePauseEnd = () => {
+            setIsPlaying(false);
+            setIsLoading(false);
+        };
+        const handleWaiting = () => setIsLoading(true);
+        const handleCanPlay = () => setIsLoading(false);
+        const handleError = (e: Event) => {
+            console.error(`Error loading audio for voice: ${voice.name}`, e);
+            setIsLoading(false);
+            setIsPlaying(false);
+        };
+
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePauseEnd);
+        audio.addEventListener('ended', handlePauseEnd);
+        audio.addEventListener('waiting', handleWaiting);
+        audio.addEventListener('canplay', handleCanPlay);
+        audio.addEventListener('error', handleError);
+
+        // Cleanup on unmount
+        return () => {
+            audio.removeEventListener('play', handlePlay);
+            audio.removeEventListener('pause', handlePauseEnd);
+            audio.removeEventListener('ended', handlePauseEnd);
+            audio.removeEventListener('waiting', handleWaiting);
+            audio.removeEventListener('canplay', handleCanPlay);
+            audio.removeEventListener('error', handleError);
+            audio.pause();
+        };
+    }, [voice.demoUrl, voice.name]);
+
+
+    const handlePlayPause = () => {
         const audio = audioRef.current;
         if (!audio) return;
 
         if (isPlaying) {
             audio.pause();
         } else {
-            setIsLoading(true);
-            try {
-                if (audio.src !== voice.demoUrl) {
-                    audio.src = voice.demoUrl;
-                    audio.load();
-                }
-                await audio.play();
-            } catch (error) {
-                console.error("Audio playback error:", error);
+            // Reset other players if any are playing
+            document.querySelectorAll('audio').forEach(a => a.pause());
+            audio.play().catch(error => {
+                console.error("Audio playback failed:", error);
                 setIsLoading(false);
-                // Optionally, add a toast to inform the user about the error
-            }
+            });
         }
     };
 
@@ -51,7 +88,7 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
                         <CardDescription>{voice.provider}</CardDescription>
                     </div>
                     {isSelected && (
-                        <Badge variant="default">
+                        <Badge variant="default" className="bg-primary hover:bg-primary">
                             <CheckCircle className="mr-2 h-4 w-4" />
                             Selected
                         </Badge>
@@ -85,25 +122,6 @@ export function VoiceCard({ voice, isSelected, onSelect }: VoiceCardProps) {
                     {isSelected ? 'Currently Selected' : 'Select this Voice'}
                 </Button>
             </CardContent>
-            <audio
-                ref={audioRef}
-                src={voice.demoUrl}
-                preload="none"
-                onPlay={() => {
-                    setIsPlaying(true);
-                    setIsLoading(false);
-                }}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
-                onWaiting={() => setIsLoading(true)}
-                onCanPlay={() => setIsLoading(false)}
-                onError={(e) => {
-                    console.error(`Error loading audio for voice: ${voice.name}`, e);
-                    setIsLoading(false);
-                    setIsPlaying(false);
-                }}
-                className="hidden"
-            />
         </Card>
     );
 }
