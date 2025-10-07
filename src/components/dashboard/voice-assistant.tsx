@@ -56,7 +56,7 @@ export default function VoiceAssistant() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
