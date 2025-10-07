@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Users,
   BrainCircuit,
-  Sparkles,
+  Settings, // Replaced Sparkles with Settings
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -24,16 +24,16 @@ import {
 
 const links = [
   { href: '/dashboard', label: 'Home', icon: Home },
-  { href: '/dashboard/scan', label: 'Scan Medicine', icon: Scan },
   { href: '/dashboard/assistant', label: 'AI Voice Assistant', icon: Mic },
+  { href: '/dashboard/scan', label: 'Scan Medicine', icon: Scan },
   { href: '/dashboard/debate', label: 'AI Debate', icon: Users },
   { href: '/dashboard/cough-detector', label: 'Cough Detector', icon: Waves },
   { href: '/dashboard/safety-check', label: 'Safety Check', icon: ShieldCheck },
   { href: '/dashboard/food-guide', label: 'Food Guide', icon: CookingPot },
   { href: '/dashboard/mood-tracker', label: 'Mood Tracker', icon: BrainCircuit },
-  { href: '/dashboard/voice-library', label: 'Voice Library', icon: Sparkles },
   { href: '/dashboard/pharmacies', label: 'Find Pharmacies', icon: Store },
   { href: '/dashboard/learn', label: 'Learn', icon: BookOpen },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings }, // Changed link
   { href: '/dashboard/emergency', label: 'Emergency Help', icon: AlertCircle },
 ];
 
