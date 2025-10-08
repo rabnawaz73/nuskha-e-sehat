@@ -323,7 +323,7 @@ export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{
 /**
  * getAudioForText - wrapper to produce TTS audio data
  */
-export async function getAudioForText({ text, lang }: { text: string; lang?: string; }): Promise<ApiResponse<{ audioDataUri: string }>> {
+export async function getAudioForText({ text }: { text: string; }): Promise<ApiResponse<{ audioDataUri: string }>> {
   try {
     const result = await textToSpeech(text);
     return { success: true, data: { audioDataUri: result.media } };

@@ -21,7 +21,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { transcribeSymptoms } from '@/app/dashboard/actions';
+import { transcribe } from '@/app/dashboard/actions';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 
@@ -189,7 +189,7 @@ export default function MedicineGuideForm({ onSubmit, isLoading }: MedicineGuide
     reader.readAsDataURL(audioBlob);
     reader.onloadend = async () => {
       const audioDataUri = reader.result as string;
-      const response = await transcribeSymptoms(audioDataUri);
+      const response = await transcribe(audioDataUri);
       
       setIsTranscribing(false);
       if (response.success && response.data) {

@@ -1,256 +1,296 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { useAuth } from '@/firebase'
-import { useToast } from '@/hooks/use-toast'
-import { VoiceCard } from '@/components/dashboard/voice-card'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import React, { useEffect, useState, useCallback } from 'react';
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth, useFirestore, useUser } from '@/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { VoiceCard } from '@/components/dashboard/voice-card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   User,
   Languages,
   BrainCircuit,
   Bell,
-  Shield,
-  Database,
-  Info,
   Palette,
   Mic,
   LogOut,
   Save,
   UserPlus,
-} from 'lucide-react'
-import { mockVoices, type Language } from '@/lib/voice-data'
-import { cn } from '@/lib/utils'
+  Database,
+  Info,
+} from 'lucide-react';
+import { mockVoices, type Language } from '@/lib/voice-data';
+import { motion } from 'framer-motion';
+
+type Prefs = {
+  theme: 'light' | 'dark';
+  language: Language;
+  voiceId: string;
+  aiLearning: boolean;
+  notifications: boolean;
+  saveHistory: boolean;
+};
+
+const DEFAULT_PREFS: Prefs = {
+  theme: 'light',
+  language: 'Urdu',
+  voiceId: 'v_ur_aisha',
+  aiLearning: true,
+  notifications: true,
+  saveHistory: true,
+};
 
 export default function SettingsPage() {
-  const { toast } = useToast()
-  const auth = useAuth()
+  const { toast } = useToast();
+  const auth = useAuth();
+  const db = useFirestore();
+  const { user, loading: authLoading } = useUser();
 
-  const [user, setUser] = useState<any>(null)
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
-  const [language, setLanguage] = useState<Language>('Urdu')
-  const [voiceId, setVoiceId] = useState<string>('v_ur_aisha')
-  const [aiLearning, setAiLearning] = useState<boolean>(true)
-  const [notifications, setNotifications] = useState<boolean>(true)
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
 
-  // Load from localStorage
+  const allLanguages = Array.from(new Set(mockVoices.map(v => v.language)));
+
+  // Effect to handle loading and syncing preferences from Firestore or localStorage
   useEffect(() => {
-    const savedPrefs = localStorage.getItem('nuskha_prefs')
-    if (savedPrefs) {
-      const prefs = JSON.parse(savedPrefs)
-      setTheme(prefs.theme || 'light')
-      setLanguage(prefs.language || 'Urdu')
-      setVoiceId(prefs.voiceId || 'v_ur_aisha')
-      setAiLearning(prefs.aiLearning ?? true)
-      setNotifications(prefs.notifications ?? true)
+    if (authLoading) {
+      setLoading(true);
+      return;
     }
 
-    const unsubscribe = auth.onAuthStateChanged(currentUser => {
-      setUser(currentUser)
-    })
+    if (user) {
+      // User is authenticated, sync with Firestore
+      const settingsRef = doc(db, 'userPreferences', user.uid);
+      const unsubscribe = onSnapshot(settingsRef, snapshot => {
+        if (snapshot.exists()) {
+          setPrefs({ ...DEFAULT_PREFS, ...snapshot.data() });
+        } else {
+          // No settings found, create default document
+          setDoc(settingsRef, { ...DEFAULT_PREFS, lastUpdated: serverTimestamp() }).catch(err => {
+            console.error('Failed to create default prefs:', err);
+          });
+          setPrefs(DEFAULT_PREFS);
+        }
+        setLoading(false);
+      }, err => {
+        console.error('Firestore onSnapshot error:', err);
+        toast({ title: 'Error', description: 'Failed to load settings from cloud.' });
+        setLoading(false);
+      });
+      return () => unsubscribe(); // Cleanup listener on unmount
+    } else {
+      // User not authenticated, use localStorage
+      const localPrefs = localStorage.getItem('nuskha_prefs');
+      if (localPrefs) {
+        try {
+          setPrefs(JSON.parse(localPrefs));
+        } catch {
+          setPrefs(DEFAULT_PREFS);
+        }
+      } else {
+        setPrefs(DEFAULT_PREFS);
+      }
+      setLoading(false);
+    }
+  }, [user, authLoading, db, toast]);
 
-    return () => unsubscribe()
-  }, [auth])
+  // Apply theme to the document body
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', prefs.theme === 'dark');
+  }, [prefs.theme]);
 
-  const handleSave = () => {
-    const prefs = { theme, language, voiceId, aiLearning, notifications }
-    localStorage.setItem('nuskha_prefs', JSON.stringify(prefs))
-    toast({
-      title: '✅ Preferences Saved',
-      description: 'Your settings were saved successfully.',
-    })
+  // Generic handler to update a preference and persist it
+  const updatePref = useCallback(async (key: keyof Prefs, value: any) => {
+    const newPrefs = { ...prefs, [key]: value };
+    setPrefs(newPrefs); // Optimistic UI update
+    
+    setSaving(true);
+    try {
+      if (user) {
+        const settingsRef = doc(db, 'userPreferences', user.uid);
+        await setDoc(settingsRef, { [key]: value, lastUpdated: serverTimestamp() }, { merge: true });
+      } else {
+        localStorage.setItem('nuskha_prefs', JSON.stringify(newPrefs));
+      }
+      toast({ title: 'Setting Saved', description: `Your ${key} preference has been updated.` });
+    } catch (err) {
+      console.error(`Failed to save pref ${key}:`, err);
+      toast({ title: 'Save Failed', description: 'Could not save your setting.', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }, [prefs, user, db, toast]);
+
+  const handleLanguageChange = (language: Language) => {
+    const firstVoice = mockVoices.find(v => v.language === language) || mockVoices[0];
+    const newPrefs = { ...prefs, language, voiceId: firstVoice.id };
+    setPrefs(newPrefs); // Optimistic update
+
+    // Persist multiple changes
+    setSaving(true);
+    if (user) {
+      const settingsRef = doc(db, 'userPreferences', user.uid);
+      setDoc(settingsRef, { language, voiceId: firstVoice.id, lastUpdated: serverTimestamp() }, { merge: true })
+        .catch(err => console.error('Failed to save language and voice:', err));
+    } else {
+      localStorage.setItem('nuskha_prefs', JSON.stringify(newPrefs));
+    }
+    setSaving(false);
   }
 
   const handleLogout = async () => {
-    await auth.signOut()
-    toast({
-      title: 'Signed out',
-      description: 'You have been logged out of Nuskha-e-Sehat.',
-    })
+    try {
+      await auth.signOut();
+      toast({ title: 'Signed out', description: 'You have been logged out.' });
+    } catch (err: any) {
+      toast({ title: 'Sign out failed', description: err?.message ?? 'An error occurred', variant: 'destructive' });
+    }
+  };
+
+  const filteredVoices = mockVoices.filter(v => v.language === prefs.language);
+
+  if (loading) {
+      return <div>Loading settings...</div>; // Or a skeleton loader
   }
 
-  const filteredVoices = mockVoices.filter(v => v.language === language)
-
   return (
-    <div className="container mx-auto py-8">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold font-headline tracking-tight">Settings</h1>
-        <p className="text-muted-foreground text-lg">
-          Manage your preferences, profile, and personalization.
-        </p>
-      </header>
+    <div className="container mx-auto py-10 px-4">
+      <motion.header
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-4xl font-extrabold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-1">Fine-tune your Nuskha-e-Sehat experience.</p>
+      </motion.header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* LEFT: Profile + AI + Language */}
-        <div className="lg:col-span-2 space-y-8">
-
-          {/* User Profile */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <motion.div layout className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="font-body flex items-center gap-2">
-                  <User /> Profile Information
-                </CardTitle>
-                <CardDescription>Manage your profile connected via Firebase Auth.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><User /> Profile</CardTitle>
+                <CardDescription>Manage your account details.</CardDescription>
               </div>
-              <Button variant="outline" size="sm">
-                <UserPlus className="mr-2 h-4 w-4" /> Edit Profile
-              </Button>
+               <Button variant="ghost" onClick={handleLogout} className="text-destructive hover:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" /> Sign out
+                </Button>
             </CardHeader>
             <CardContent className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
-                <AvatarImage src={user?.photoURL || 'https://picsum.photos/100'} />
-                <AvatarFallback>{user?.displayName?.[0] || 'U'}</AvatarFallback>
+                <AvatarImage src={user?.photoURL || `https://i.pravatar.cc/150?u=${user?.uid || 'guest'}`} />
+                <AvatarFallback>{user?.displayName?.[0] ?? 'G'}</AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-semibold text-lg">{user?.displayName || 'Anonymous User'}</p>
-                <p className="text-muted-foreground text-sm">{user?.email || 'Not logged in'}</p>
+                <p className="font-semibold text-lg">{user?.displayName || 'Guest User'}</p>
+                <p className="text-muted-foreground text-sm">{user?.email ?? 'Not signed in. Settings are saved locally.'}</p>
               </div>
-              <Button variant="ghost" onClick={handleLogout} className="ml-auto text-destructive">
-                <LogOut className="mr-2 h-4 w-4" /> Logout
-              </Button>
             </CardContent>
           </Card>
 
-          {/* Language & Voice */}
           <Card>
             <CardHeader>
-              <CardTitle className="font-body flex items-center gap-2">
-                <Languages /> Language & Voice
-              </CardTitle>
-              <CardDescription>
-                Choose your assistant’s speaking language and voice.
-              </CardDescription>
+              <CardTitle className="flex items-center gap-2"><Languages /> Language & Voice</CardTitle>
+              <CardDescription>Pick the language and voice for your AI assistant.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Select Language</Label>
-                <Select value={language} onValueChange={(v: Language) => setLanguage(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[...new Set(mockVoices.map(v => v.language))].map(lang => (
-                      <SelectItem key={lang} value={lang}>
-                        {lang}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
+            <CardContent className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredVoices.map(voice => (
-                  <VoiceCard
-                    key={voice.id}
-                    voice={voice}
-                    isSelected={voiceId === voice.id}
-                    onSelect={() => setVoiceId(voice.id)}
-                  />
-                ))}
+                <div>
+                  <Label className="text-sm font-bold">Primary Language</Label>
+                  <Select value={prefs.language} onValueChange={(v: Language) => handleLanguageChange(v)}>
+                    <SelectTrigger className="w-full mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {allLanguages.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-sm font-bold">Voice</Label>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {filteredVoices.map(v => (
+                      <VoiceCard
+                        key={v.id}
+                        voice={v}
+                        isSelected={prefs.voiceId === v.id}
+                        onSelect={() => updatePref('voiceId', v.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* AI Personalization */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BrainCircuit /> AI Personalization
-              </CardTitle>
-              <CardDescription>
-                Control how your AI assistant learns and adapts.
-              </CardDescription>
+              <CardTitle className="flex items-center gap-2"><BrainCircuit /> AI & Data</CardTitle>
+              <CardDescription>Control what the AI learns and stores.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center border p-4 rounded-lg">
-                <Label>
-                  Allow AI to learn my habits
-                  <p className="text-sm text-muted-foreground">
-                    AI tailors advice based on your health history.
-                  </p>
-                </Label>
-                <Switch checked={aiLearning} onCheckedChange={setAiLearning} />
+               <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <Label htmlFor="aiLearning" className="font-medium">Allow AI to learn from my usage</Label>
+                  <p className="text-sm text-muted-foreground">Improves suggestions over time.</p>
+                </div>
+                <Switch id="aiLearning" checked={prefs.aiLearning} onCheckedChange={(v) => updatePref('aiLearning', v)} />
               </div>
-              <Button variant="outline">Reset Learning Data</Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RIGHT: Preferences + Data + Info */}
-        <div className="lg:col-span-1 space-y-8 sticky top-8">
-
-          {/* Theme & Notifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette /> Preferences
-              </CardTitle>
-              <CardDescription>Choose theme and notification settings.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Label>Dark Mode</Label>
-                <Switch checked={theme === 'dark'} onCheckedChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-              </div>
-              <div className="flex justify-between items-center">
-                <Label>Enable Notifications</Label>
-                <Switch checked={notifications} onCheckedChange={setNotifications} />
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <Label htmlFor="saveHistory" className="font-medium">Save conversation history</Label>
+                  <p className="text-sm text-muted-foreground">Stores transcripts in your account.</p>
+                </div>
+                <Switch id="saveHistory" checked={prefs.saveHistory} onCheckedChange={(v) => updatePref('saveHistory', v)} />
               </div>
             </CardContent>
           </Card>
+        </motion.div>
 
-          {/* Data & Privacy */}
+        <motion.div layout className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Database /> Data & Privacy
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Palette /> Appearance & Notifications</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full">
-                Export Health Report
-              </Button>
-              <Button variant="destructive" className="w-full">
-                Clear All My Data
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* App Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Info /> App Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p className="flex justify-between">
-                <span>Version</span> <span>v1.2.0</span>
-              </p>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label>Dark mode</Label>
+                <Switch checked={prefs.theme === 'dark'} onCheckedChange={(v) => updatePref('theme', v ? 'dark' : 'light')} />
+              </div>
               <Separator />
-              <p className="italic text-muted-foreground">
-                “Empowering every Pakistani with AI-powered healthcare knowledge.”
-              </p>
-              <div className="flex gap-2 mt-3">
-                <Button variant="outline" className="w-full">Rate App</Button>
-                <Button variant="outline" className="w-full">Share</Button>
+              <div className="flex items-center justify-between">
+                <Label>Push Notifications</Label>
+                <Switch checked={prefs.notifications} onCheckedChange={(v) => updatePref('notifications', v)} />
               </div>
             </CardContent>
           </Card>
 
-          <Button onClick={handleSave} className="w-full shadow-md">
-            <Save className="mr-2 h-4 w-4" /> Save All Changes
-          </Button>
-        </div>
+          <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><UserPlus /> Emergency Contacts</CardTitle>
+                <CardDescription>Add contacts for SOS alerts.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button variant="outline" className="w-full" onClick={() => toast({title: 'Coming Soon!'})}>Manage Contacts</Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Info /> About</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm space-y-2">
+              <div className="flex justify-between"><span>Version</span><span className="text-muted-foreground">1.2.0</span></div>
+              <div className="flex justify-between"><span>Build</span><span className="text-muted-foreground">20240523</span></div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
-  )
+  );
 }
