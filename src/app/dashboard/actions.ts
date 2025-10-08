@@ -211,7 +211,7 @@ export async function transcribe(audioDataUri: string): Promise<ApiResponse<{ te
     // Assuming transcribeAudio flow returns text, confidence, and detected language
     return { success: true, data: { text: result.text, confidence: 0.9, detectedLang: 'Urdu' } };
   } catch (err) {
-    console.error('transcribeSymptoms error:', err);
+    console.error('transcribe error:', err);
     return { success: false, error: formatError(err) };
   }
 }
@@ -384,18 +384,18 @@ export async function getEmotionFromMedia(input: { selfieDataUri?: string; audio
 
     const emotionResponse = await withTimeout(detectEmotion({ mediaUri }), AI_TIMEOUT_MS);
     
-    if (emotionResponse.success && emotionResponse.data.emotion) {
+    if (emotionResponse?.emotion) {
         const adviceResponse = await getAdviceForMood({ 
-            emotion: emotionResponse.data.emotion,
+            emotion: emotionResponse.emotion,
             user_lang: input.userLang || 'ur'
         });
         if (adviceResponse.success) {
-            return { success: true, data: { ...emotionResponse.data, ...adviceResponse.data }};
+            return { success: true, data: { ...emotionResponse, ...adviceResponse.data }};
         } else {
             return { success: false, error: adviceResponse.error || 'Failed to get mood advice.'};
         }
     }
-    return { success: false, error: emotionResponse.error || 'Failed to detect emotion.'};
+    return { success: false, error: 'Failed to detect emotion.'};
 
   } catch (err) {
     console.error('getEmotionFromMedia error:', err);
