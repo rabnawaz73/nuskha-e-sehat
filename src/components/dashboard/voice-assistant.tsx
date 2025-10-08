@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, User, Send, Volume2, Stethoscope, Loader2, ArrowLeft, Settings, AlertCircle } from 'lucide-react';
+import { Mic, User, Send, Volume2, Stethoscope, Loader2, ArrowLeft, Settings, AlertCircle, Play, Pause, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { runHealthAdvisor, getAudioForText } from '@/app/dashboard/actions';
 import { cn } from '@/lib/utils';
@@ -45,8 +45,7 @@ export default function VoiceAssistant() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState<number | null>(null);
   const [isPlayingAudioFor, setIsPlayingAudioFor] = useState<number | null>(null);
-  const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
-
+  
   const [conversation, setConversation] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -65,11 +64,10 @@ export default function VoiceAssistant() {
     }
   }, [conversation, isLoading]);
 
-  const handlePlayAudio = async (message: Message) => {
+  const handlePlayAudio = useCallback(async (message: Message) => {
     if (audioPlayerRef.current && audioPlayerRef.current.src && isPlayingAudioFor === message.id) {
         audioPlayerRef.current.pause();
         setIsPlayingAudioFor(null);
-        setIsAssistantSpeaking(false);
         return;
     }
     
@@ -77,7 +75,7 @@ export default function VoiceAssistant() {
 
     if (!audioDataUriToPlay) {
         setIsSynthesizing(message.id);
-        const response = await getAudioForText(message.text);
+        const response = await getAudioForText({ text: message.text, lang: selectedLanguage });
         setIsSynthesizing(null);
 
         if (response.success && response.data?.audioDataUri) {
@@ -96,20 +94,19 @@ export default function VoiceAssistant() {
     }
     
     if (audioDataUriToPlay && audioPlayerRef.current) {
+        // Stop any currently playing audio
+        document.querySelectorAll('audio').forEach(a => a.pause());
+
         audioPlayerRef.current.src = audioDataUriToPlay;
-        audioPlayerRef.current.play();
+        audioPlayerRef.current.play().catch(e => console.error("Error playing audio:", e));
         setIsPlayingAudioFor(message.id);
-        setIsAssistantSpeaking(true);
     }
-  }
+  }, [isPlayingAudioFor, selectedLanguage, toast]);
 
   useEffect(() => {
     const player = audioPlayerRef.current;
     if (player) {
-      const onEnded = () => {
-        setIsPlayingAudioFor(null);
-        setIsAssistantSpeaking(false);
-      }
+      const onEnded = () => setIsPlayingAudioFor(null);
       player.addEventListener('ended', onEnded);
       player.addEventListener('pause', onEnded);
       return () => {
@@ -139,7 +136,7 @@ export default function VoiceAssistant() {
     
     if (response.success && response.data?.text) {
       const fullText = response.data.text;
-      const finalMessage = { id: assistantMessageId, role: 'assistant', text: fullText, isStreaming: false, timestamp: new Date() };
+      const finalMessage: Message = { id: assistantMessageId, role: 'assistant', text: fullText, isStreaming: false, timestamp: new Date() };
       setConversation(prev => prev.map(msg => 
         msg.id === assistantMessageId ? finalMessage : msg
       ));
@@ -265,7 +262,7 @@ export default function VoiceAssistant() {
                             onClick={() => handlePlayAudio(msg)}
                             disabled={isSynthesizing === msg.id}
                         >
-                            { isSynthesizing === msg.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Volume2 className="h-4 w-4"/>}
+                            { isSynthesizing === msg.id ? <Loader2 className="h-4 w-4 animate-spin"/> : isPlayingAudioFor === msg.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                         </Button>
                         )}
                     </div>
@@ -302,6 +299,15 @@ export default function VoiceAssistant() {
               </Button>
             </Link>
           )}
+
+          {photoPreview && (
+              <div className="relative w-24 h-24">
+                <Image src={photoPreview} alt="upload preview" layout="fill" className="rounded-md object-cover" />
+                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}>
+                    <X className="h-4 w-4"/>
+                </Button>
+              </div>
+          )}
         
           <div className="relative flex items-center justify-center gap-2">
                 <div className="relative w-full flex items-center">
@@ -318,7 +324,7 @@ export default function VoiceAssistant() {
                             }
                         }}
                     />
-                     <Button size="icon" variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full" onClick={handleSendText} disabled={isLoading || !inputText.trim()}>
+                     <Button size="icon" variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full" onClick={handleSendText} disabled={isLoading || (!inputText.trim() && !photoFile)}>
                         <Send className="h-5 w-5 text-slate-500" />
                     </Button>
                 </div>

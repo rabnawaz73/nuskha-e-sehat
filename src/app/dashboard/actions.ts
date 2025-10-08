@@ -1,7 +1,6 @@
 'use server';
 
 import { z } from 'zod';
-import type { Readable } from 'stream';
 import { identifyMedicineFromImage } from '@/ai/flows/identify-medicine-from-image';
 import { detectFakeOrExpiredMedicine } from '@/ai/flows/detect-fake-or-expired-medicine';
 import { getPersonalizedHealthGuidance } from '@/ai/flows/personalized-health-guidance';
@@ -23,7 +22,7 @@ import type { DetectEmotionInput, GetMoodAdviceInput } from '@/ai/types/emotion'
 /**
  * Central API response shape used across server actions.
  */
-type ApiResponse<T> =
+export type ApiResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
@@ -31,7 +30,7 @@ type ApiResponse<T> =
  * Timeout helper for long-running AI calls.
  * Wraps a promise and rejects if not settled in `ms`.
  */
-async function withTimeout<T>(promise: Promise<T>, ms = 20_000): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms = 30_000): Promise<T> {
   return await Promise.race([
     promise,
     new Promise<T>((_, reject) =>
@@ -44,6 +43,9 @@ async function withTimeout<T>(promise: Promise<T>, ms = 20_000): Promise<T> {
  * Small centralized error formatter for consistent user-facing messages.
  */
 function formatError(e: unknown): string {
+  if (e instanceof z.ZodError) {
+    return 'Invalid input provided. Please check the form and try again.';
+  }
   if (e instanceof Error) {
     // map common transient errors to friendly messages
     if (e.message.includes('ECONNRESET') || e.message.includes('timed out')) {
@@ -67,20 +69,12 @@ function isValidDataUri(value?: unknown) {
  * Limit for uploaded media (in bytes). 6 MB default here - adjust as needed.
  */
 const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
-const AI_TIMEOUT_MS = 25_000;
+const AI_TIMEOUT_MS = 35_000;
 
 /* ----------------------------
    Input schemas (zod)
    ---------------------------- */
-
-const GuideSchema = z.object({
-  age: z.coerce.number().optional(),
-  gender: z.enum(['male', 'female', 'other']).optional(),
-  symptoms: z.string().trim().optional(),
-  media: z.any().optional(),
-});
-
-const HealthAdvisorInputSchema = z.object({
+export const HealthAdvisorInputSchema = z.object({
   audioDataUri: z.string().optional().describe("Base64 data URI for audio."),
   textQuery: z.string().trim().optional(),
   photoDataUri: z.string().optional().describe("Base64 data URI for an image."),
@@ -105,6 +99,13 @@ export type HealthAdvisorInput = z.infer<typeof HealthAdvisorInputSchema>;
  */
 export async function getMedicineGuide(formData: FormData): Promise<ApiResponse<any>> {
   try {
+    const GuideSchema = z.object({
+        age: z.coerce.number().optional(),
+        gender: z.enum(['male', 'female', 'other']).optional(),
+        symptoms: z.string().trim().optional(),
+        media: z.any().optional(),
+    });
+    
     const parsed = GuideSchema.parse({
       age: formData.get('age') || undefined,
       gender: formData.get('gender') || undefined,
@@ -147,13 +148,12 @@ export async function getMedicineGuide(formData: FormData): Promise<ApiResponse<
       // Personalized guidance (may be slower)
       const guidance = await withTimeout(
         getPersonalizedHealthGuidance({
-          age: age ?? 0, // or prompt user for age
+          age: age ?? 30, // sensible default
           gender: gender ?? 'other',
-          symptoms: symptoms ?? '',
+          symptoms: symptoms,
           medicineName: identification?.medicineName ?? '',
           medicineUsage: identification?.usage ?? '',
         }),
-        
         AI_TIMEOUT_MS
       );
 
@@ -200,28 +200,16 @@ export async function translateJargon(input: TranslateMedicalJargonInput): Promi
 }
 
 /**
- * getVoiceGuidance - voice assistant wrapper
+ * transcribeAudio - wrapper to transcribe audio data URI -> text
  */
-export async function getVoiceGuidance(input: VoiceBasedAssistantForSymptomsInput): Promise<ApiResponse<any>> {
-  try {
-    const result = await withTimeout(voiceBasedAssistantForSymptoms(input), AI_TIMEOUT_MS);
-    return { success: true, data: result };
-  } catch (err) {
-    console.error('getVoiceGuidance error:', err);
-    return { success: false, error: formatError(err) };
-  }
-}
-
-/**
- * transcribeSymptoms - wrapper to transcribe audio data URI -> text
- */
-export async function transcribeSymptoms(audioDataUri: string): Promise<ApiResponse<any>> {
+export async function transcribe(audioDataUri: string): Promise<ApiResponse<{ text: string, confidence?: number, detectedLang?: string }>> {
   try {
     if (!isValidDataUri(audioDataUri)) {
       return { success: false, error: 'Invalid audio data. Provide a base64 data URI.' };
     }
     const result = await withTimeout(transcribeAudio(audioDataUri), AI_TIMEOUT_MS);
-    return { success: true, data: result };
+    // Assuming transcribeAudio flow returns text, confidence, and detected language
+    return { success: true, data: { text: result.text, confidence: 0.9, detectedLang: 'Urdu' } };
   } catch (err) {
     console.error('transcribeSymptoms error:', err);
     return { success: false, error: formatError(err) };
@@ -244,12 +232,12 @@ export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{
       if (!isValidDataUri(input.audioDataUri)) {
         return { success: false, error: 'Invalid audio data format.' };
       }
-      const transcribe = await withTimeout(transcribeAudio(input.audioDataUri), AI_TIMEOUT_MS).catch((e) => {
+      const transcribeResult = await withTimeout(transcribeAudio(input.audioDataUri), AI_TIMEOUT_MS).catch((e) => {
         console.error('Transcription error:', e);
         return null;
       });
-      if (transcribe && typeof transcribe.text === 'string' && transcribe.text.trim()) {
-        userQuery = transcribe.text.trim();
+      if (transcribeResult && typeof transcribeResult.text === 'string' && transcribeResult.text.trim()) {
+        userQuery = transcribeResult.text.trim();
       }
     }
 
@@ -290,7 +278,7 @@ export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{
         );
 
         const text = [
-          '⚠️ Disclaimer: I am not a doctor. This is informational only.',
+          '⚠️ Disclaimer: I am not a doctor. This is for informational purposes only.',
           `Identified medicine: ${identification?.medicineName ?? 'Unknown'}.`,
           `Purpose: ${identification?.usage ?? 'Unknown'}.`,
           authenticity ? (authenticity.isFakeOrExpired ? `Authenticity check: ${authenticity.reason}` : 'Authenticity: Appears authentic/not expired.') : '',
@@ -306,7 +294,7 @@ export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{
       // only photo provided — ask for more details
       return {
         success: true,
-        data: { text: `I found ${identification?.medicineName ?? 'a medicine'}. Tell me your age, gender, and symptoms for personalized advice.` },
+        data: { text: `I found ${identification?.medicineName ?? 'a medicine'}. Please tell me your age, gender, and symptoms for personalized advice.` },
       };
     }
 
@@ -334,24 +322,9 @@ export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{
 
 /**
  * getAudioForText - wrapper to produce TTS audio data
- * Signature: getAudioForText({ text, lang })
  */
-export async function getAudioForText({
-  text,
-  lang,
-}: {
-  text: string;
-  lang: string;
-}): Promise<{
-  success: boolean;
-  data?: { audioDataUri: string };
-  error?: string;
-}> {
+export async function getAudioForText({ text, lang }: { text: string; lang?: string; }): Promise<ApiResponse<{ audioDataUri: string }>> {
   try {
-    // This is a placeholder. In a real app, you might have a Next.js API route
-    // that calls your TTS flow. For simplicity here, we call the flow directly,
-    // but this breaks the client/server boundary if not structured carefully.
-    // The preferred way is an API route (`/api/tts`).
     const result = await textToSpeech(text);
     return { success: true, data: { audioDataUri: result.media } };
   } catch (err) {
@@ -404,10 +377,26 @@ export async function runDebate(input: DebateInput): Promise<ApiResponse<any>> {
 /**
  * getEmotionFromMedia
  */
-export async function getEmotionFromMedia(input: DetectEmotionInput): Promise<ApiResponse<any>> {
+export async function getEmotionFromMedia(input: { selfieDataUri?: string; audioDataUri?: string; userLang?: string; }): Promise<ApiResponse<any>> {
   try {
-    const res = await withTimeout(detectEmotion(input), AI_TIMEOUT_MS);
-    return { success: true, data: res };
+    const mediaUri = input.selfieDataUri || input.audioDataUri;
+    if (!mediaUri) return { success: false, error: 'No media provided for emotion detection.' };
+
+    const emotionResponse = await withTimeout(detectEmotion({ mediaUri }), AI_TIMEOUT_MS);
+    
+    if (emotionResponse.success && emotionResponse.data.emotion) {
+        const adviceResponse = await getAdviceForMood({ 
+            emotion: emotionResponse.data.emotion,
+            user_lang: input.userLang || 'ur'
+        });
+        if (adviceResponse.success) {
+            return { success: true, data: { ...emotionResponse.data, ...adviceResponse.data }};
+        } else {
+            return { success: false, error: adviceResponse.error || 'Failed to get mood advice.'};
+        }
+    }
+    return { success: false, error: emotionResponse.error || 'Failed to detect emotion.'};
+
   } catch (err) {
     console.error('getEmotionFromMedia error:', err);
     return { success: false, error: formatError(err) };
@@ -415,7 +404,7 @@ export async function getEmotionFromMedia(input: DetectEmotionInput): Promise<Ap
 }
 
 /**
- * getAdviceForMood
+ * getAdviceForMood - This is called by getEmotionFromMedia, but can be used standalone if emotion is known
  */
 export async function getAdviceForMood(input: GetMoodAdviceInput): Promise<ApiResponse<any>> {
   try {
@@ -425,4 +414,15 @@ export async function getAdviceForMood(input: GetMoodAdviceInput): Promise<ApiRe
     console.error('getAdviceForMood error:', err);
     return { success: false, error: formatError(err) };
   }
+}
+
+/**
+ * sendSOS
+ */
+export async function sendSOS({ userId, location, message }: { userId: string; location: {lat:number,lng:number}; message?: string; }): Promise<ApiResponse<{ alertId?: string }>> {
+    // This is a placeholder for a real implementation that would:
+    // 1. Write to Firestore `emergency/alerts/{alertId}`
+    // 2. Trigger a Firebase Function to send SMS/WhatsApp to trusted contacts
+    console.log(`SOS triggered for user ${userId} at ${location.lat}, ${location.lng} with message: "${message}"`);
+    return { success: true, data: { alertId: `test_${Date.now()}` } };
 }

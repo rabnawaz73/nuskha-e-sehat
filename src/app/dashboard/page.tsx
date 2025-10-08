@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Settings, CalendarDays } from "lucide-react";
+import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Settings, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const features = [
@@ -14,11 +14,11 @@ const features = [
     primary: true,
   },
   {
-    title: "Health Timeline",
-    description: "View your health history, symptoms, and AI insights in one place.",
-    href: "/dashboard/timeline",
-    icon: CalendarDays,
-    cta: "View Timeline",
+    title: "Live Conversation",
+    description: "Have a real-time, translated conversation with the AI health companion.",
+    href: "/dashboard/conversation",
+    icon: MessageSquare,
+    cta: "Start Talking",
     primary: true,
   },
    {
