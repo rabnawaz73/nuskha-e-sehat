@@ -13,7 +13,6 @@ import {
   Users,
   BrainCircuit,
   Settings,
-  MessageSquare,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -26,7 +25,6 @@ import {
 const links = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/dashboard/assistant', label: 'AI Voice Assistant', icon: Mic },
-  { href: '/dashboard/conversation', label: 'Live Conversation', icon: MessageSquare },
   { href: '/dashboard/scan', label: 'Scan Medicine', icon: Scan },
   { href: '/dashboard/debate', label: 'AI Debate', icon: Users },
   { href: '/dashboard/cough-detector', label: 'Cough Detector', icon: Waves },

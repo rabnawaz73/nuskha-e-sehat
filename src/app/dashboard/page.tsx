@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Settings, MessageSquare } from "lucide-react";
+import { ArrowRight, Video, Mic, Store, AlertCircle, BookOpen, CookingPot, ShieldCheck, Waves, Users, BrainCircuit, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const features = [
@@ -11,14 +11,6 @@ const features = [
     href: "/dashboard/assistant",
     icon: Mic,
     cta: "Ask Assistant",
-    primary: true,
-  },
-  {
-    title: "Live Conversation",
-    description: "Have a real-time, translated conversation with the AI health companion.",
-    href: "/dashboard/conversation",
-    icon: MessageSquare,
-    cta: "Start Talking",
     primary: true,
   },
    {
@@ -60,7 +52,7 @@ const features = [
     title: "Scan Medicine",
     description: "Upload a video or image of your medicine to identify it.",
     href: "/dashboard/scan",
-    icon: Video,
+icon: Video,
     cta: "Start Scanning",
   },
    {

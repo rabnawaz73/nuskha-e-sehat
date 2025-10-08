@@ -1,5 +1,4 @@
-import VoiceAssistant from "@/components/dashboard/voice-assistant";
-
+// This page has been removed.
 export default function ConversationPage() {
-    return <VoiceAssistant />
+    return null;
 }
