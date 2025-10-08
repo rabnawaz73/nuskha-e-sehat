@@ -1,15 +1,10 @@
 'use server';
 
 import { z } from 'zod';
-import {
-  identifyMedicineFromImage,
-} from '@/ai/flows/identify-medicine-from-image';
-import {
-  detectFakeOrExpiredMedicine,
-} from '@/ai/flows/detect-fake-or-expired-medicine';
-import {
-  getPersonalizedHealthGuidance,
-} from '@/ai/flows/personalized-health-guidance';
+import type { Readable } from 'stream';
+import { identifyMedicineFromImage } from '@/ai/flows/identify-medicine-from-image';
+import { detectFakeOrExpiredMedicine } from '@/ai/flows/detect-fake-or-expired-medicine';
+import { getPersonalizedHealthGuidance } from '@/ai/flows/personalized-health-guidance';
 import { translateMedicalJargon, TranslateMedicalJargonInput } from '@/ai/flows/translate-medical-jargon';
 import { voiceBasedAssistantForSymptoms } from '@/ai/flows/voice-based-assistant-for-symptoms';
 import type { VoiceBasedAssistantForSymptomsInput } from '@/ai/flows/voice-based-assistant-for-symptoms';
@@ -25,349 +20,409 @@ import { detectEmotion } from '@/ai/flows/detect-emotion-flow';
 import { getMoodAdviceFlow } from '@/ai/flows/get-mood-advice-flow';
 import type { DetectEmotionInput, GetMoodAdviceInput } from '@/ai/types/emotion';
 
+/**
+ * Central API response shape used across server actions.
+ */
+type ApiResponse<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
 
-const guideSchema = z.object({
+/**
+ * Timeout helper for long-running AI calls.
+ * Wraps a promise and rejects if not settled in `ms`.
+ */
+async function withTimeout<T>(promise: Promise<T>, ms = 20_000): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+/**
+ * Small centralized error formatter for consistent user-facing messages.
+ */
+function formatError(e: unknown): string {
+  if (e instanceof Error) {
+    // map common transient errors to friendly messages
+    if (e.message.includes('ECONNRESET') || e.message.includes('timed out')) {
+      return 'The AI service is temporarily unavailable. Please try again in a moment.';
+    }
+    return e.message || 'An unexpected error occurred.';
+  }
+  return 'An unexpected error occurred.';
+}
+
+/**
+ * Basic validation helpers for data URIs
+ */
+function isValidDataUri(value?: unknown) {
+  if (!value || typeof value !== 'string') return false;
+  // Very small validation (do not use for security decisions)
+  return /^data:[\w/+.-]+;base64,[A-Za-z0-9+/=]+$/.test(value);
+}
+
+/**
+ * Limit for uploaded media (in bytes). 6 MB default here - adjust as needed.
+ */
+const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
+const AI_TIMEOUT_MS = 25_000;
+
+/* ----------------------------
+   Input schemas (zod)
+   ---------------------------- */
+
+const GuideSchema = z.object({
   age: z.coerce.number().optional(),
   gender: z.enum(['male', 'female', 'other']).optional(),
-  symptoms: z.string().optional(),
+  symptoms: z.string().trim().optional(),
   media: z.any().optional(),
 });
 
 const HealthAdvisorInputSchema = z.object({
-  audioDataUri: z.string().optional().describe(
-    "The user's voice query as a data URI. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
-  ),
-  textQuery: z.string().optional().describe("The user's text query."),
-  photoDataUri: z.string().optional().describe(
-    "A photo of a medicine, as a data URI. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
-  ),
-  userDetails: z.object({
-    age: z.coerce.number().optional(),
-    gender: z.enum(['male', 'female', 'other']).optional(),
-  }).optional(),
+  audioDataUri: z.string().optional().describe("Base64 data URI for audio."),
+  textQuery: z.string().trim().optional(),
+  photoDataUri: z.string().optional().describe("Base64 data URI for an image."),
+  userDetails: z
+    .object({
+      age: z.coerce.number().optional(),
+      gender: z.enum(['male', 'female', 'other']).optional(),
+    })
+    .optional(),
   userLang: z.string().optional(),
 });
 export type HealthAdvisorInput = z.infer<typeof HealthAdvisorInputSchema>;
 
+/* ----------------------------
+   Public server action functions
+   ---------------------------- */
 
-export async function getMedicineGuide(formData: FormData) {
+/**
+ * getMedicineGuide
+ * Accepts form-data containing age, gender, symptoms and/or media (image/video).
+ * Returns either identification + guidance or friendly error messages.
+ */
+export async function getMedicineGuide(formData: FormData): Promise<ApiResponse<any>> {
   try {
-    const validatedData = guideSchema.parse({
+    const parsed = GuideSchema.parse({
       age: formData.get('age') || undefined,
       gender: formData.get('gender') || undefined,
       symptoms: formData.get('symptoms') || undefined,
-      media: formData.get('media'),
+      media: formData.get('media') || undefined,
     });
 
-    const { age, gender, symptoms, media } = validatedData;
-    
+    const { age, gender, symptoms, media } = parsed;
+
     if (!media && !symptoms) {
-      return {
-        success: false,
-        error: 'Please provide either symptoms or a medicine image/video.',
-      };
+      return { success: false, error: 'Provide symptoms text or upload a medicine image/video.' };
     }
-    
+
     let photoDataUri: string | undefined;
-    if (media && media.size > 0) {
-      const buffer = await media.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString('base64');
-      photoDataUri = `data:${media.type};base64,${base64}`;
-    }
-
-    // Case 1: Photo and symptoms provided
-    if (photoDataUri && symptoms && age && gender) {
-       const [identification, authenticity] = await Promise.all([
-        identifyMedicineFromImage({ photoDataUri }),
-        detectFakeOrExpiredMedicine({ photoDataUri }),
-      ]);
-
-      const guidance = await getPersonalizedHealthGuidance({
-        age,
-        gender,
-        symptoms,
-        medicineName: identification.medicineName,
-        medicineUsage: identification.usage,
-      });
-
-       return {
-        success: true,
-        data: {
-          identification,
-          authenticity,
-          guidance,
-        },
-      };
-    }
-
-    // Case 2: Only photo provided
-    if (photoDataUri) {
-      const identification = await identifyMedicineFromImage({ photoDataUri });
-      return {
-        success: true,
-        data: {
-          identification,
-          guidance: null,
-          authenticity: null,
+    if (media) {
+      // Media might be a File or a string data URL already on server
+      // If it's a File (Web API), convert to data URI
+      if (typeof (media as any).arrayBuffer === 'function') {
+        const file = media as File;
+        if (file.size > MAX_MEDIA_BYTES) {
+          return { success: false, error: `Uploaded file exceeds ${MAX_MEDIA_BYTES / 1_048_576} MB limit.` };
         }
+        const buffer = await file.arrayBuffer();
+        photoDataUri = `data:${file.type};base64,${Buffer.from(buffer).toString('base64')}`;
+      } else if (typeof media === 'string' && isValidDataUri(media)) {
+        photoDataUri = media;
+      } else {
+        return { success: false, error: 'Unsupported media format. Please upload an image or short video.' };
       }
     }
 
-    // Case 3: Only symptoms provided
+    // If photo + symptoms + demographic available => full personalized flow
+    if (photoDataUri && symptoms) {
+      // Run identification + authenticity in parallel (fast)
+      const [identification, authenticity] = await Promise.all([
+        withTimeout(identifyMedicineFromImage({ photoDataUri }), AI_TIMEOUT_MS),
+        withTimeout(detectFakeOrExpiredMedicine({ photoDataUri }), AI_TIMEOUT_MS),
+      ]);
+
+      // Personalized guidance (may be slower)
+      const guidance = await withTimeout(
+        getPersonalizedHealthGuidance({
+          age: age ?? 0, // or prompt user for age
+          gender: gender ?? 'other',
+          symptoms: symptoms ?? '',
+          medicineName: identification?.medicineName ?? '',
+          medicineUsage: identification?.usage ?? '',
+        }),
+        
+        AI_TIMEOUT_MS
+      );
+
+      return {
+        success: true,
+        data: { identification, authenticity, guidance },
+      };
+    }
+
+    // If only photo given -> identify + return
+    if (photoDataUri) {
+      const identification = await withTimeout(identifyMedicineFromImage({ photoDataUri }), AI_TIMEOUT_MS);
+      return { success: true, data: { identification, authenticity: null, guidance: null } };
+    }
+
+    // Only symptoms provided -> general health query
     if (symptoms) {
-        const responseText = await generalHealthQuery({symptoms, age, gender});
-        return {
-          success: true,
-          data: { text: responseText }
-        };
+      const responseText = await withTimeout(
+        generalHealthQuery({ symptoms, age, gender }),
+        AI_TIMEOUT_MS
+      );
+      return { success: true, data: { text: responseText } };
     }
 
-    // Should not be reached due to initial check
-    return {
-      success: false,
-      error: 'Invalid input combination.',
-    }
-
-  } catch (error) {
-    console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-    return {
-      success: false,
-      error: errorMessage,
-    };
+    // fallback guard (shouldn't be reached)
+    return { success: false, error: 'Invalid input combination.' };
+  } catch (err) {
+    console.error('getMedicineGuide error:', err);
+    return { success: false, error: formatError(err) };
   }
 }
 
-export async function translateJargon(input: TranslateMedicalJargonInput) {
-    try {
-        const result = await translateMedicalJargon(input);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        return {
-          success: false,
-          error: errorMessage,
-        };
-    }
-}
-
-export async function getVoiceGuidance(input: VoiceBasedAssistantForSymptomsInput) {
-    try {
-        const result = await voiceBasedAssistantForSymptoms(input);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        return {
-          success: false,
-          error: errorMessage,
-        };
-    }
-}
-
-export async function transcribeSymptoms(audioDataUri: string) {
-    try {
-        const result = await transcribeAudio(audioDataUri);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        return {
-          success: false,
-          error: errorMessage,
-        };
-    }
-}
-
-export async function runHealthAdvisor(input: HealthAdvisorInput) {
+/**
+ * translateJargon
+ */
+export async function translateJargon(input: TranslateMedicalJargonInput): Promise<ApiResponse<any>> {
   try {
-    let userQuery = input.textQuery || '';
+    const result = await withTimeout(translateMedicalJargon(input), AI_TIMEOUT_MS);
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('translateJargon error:', err);
+    return { success: false, error: formatError(err) };
+  }
+}
 
-    // Step 1: Transcribe audio if present
+/**
+ * getVoiceGuidance - voice assistant wrapper
+ */
+export async function getVoiceGuidance(input: VoiceBasedAssistantForSymptomsInput): Promise<ApiResponse<any>> {
+  try {
+    const result = await withTimeout(voiceBasedAssistantForSymptoms(input), AI_TIMEOUT_MS);
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('getVoiceGuidance error:', err);
+    return { success: false, error: formatError(err) };
+  }
+}
+
+/**
+ * transcribeSymptoms - wrapper to transcribe audio data URI -> text
+ */
+export async function transcribeSymptoms(audioDataUri: string): Promise<ApiResponse<any>> {
+  try {
+    if (!isValidDataUri(audioDataUri)) {
+      return { success: false, error: 'Invalid audio data. Provide a base64 data URI.' };
+    }
+    const result = await withTimeout(transcribeAudio(audioDataUri), AI_TIMEOUT_MS);
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('transcribeSymptoms error:', err);
+    return { success: false, error: formatError(err) };
+  }
+}
+
+/**
+ * runHealthAdvisor - the main orchestrator used by the front-end voice assistant
+ * Accepts HealthAdvisorInput and returns a human-friendly assistant message (text).
+ */
+export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{ text: string }>> {
+  try {
+    // parse & validate input (throws if invalid)
+    const input = HealthAdvisorInputSchema.parse(inputRaw);
+
+    // 1) Transcribe audio if provided
+    let userQuery = input.textQuery?.trim() ?? '';
+
     if (input.audioDataUri) {
-      const transcriptionResponse = await transcribeAudio(input.audioDataUri);
-      if (transcriptionResponse.text) {
-        userQuery = transcriptionResponse.text;
+      if (!isValidDataUri(input.audioDataUri)) {
+        return { success: false, error: 'Invalid audio data format.' };
+      }
+      const transcribe = await withTimeout(transcribeAudio(input.audioDataUri), AI_TIMEOUT_MS).catch((e) => {
+        console.error('Transcription error:', e);
+        return null;
+      });
+      if (transcribe && typeof transcribe.text === 'string' && transcribe.text.trim()) {
+        userQuery = transcribe.text.trim();
       }
     }
-    
+
+    // 2) If nothing given, prompt user
     if (!userQuery && !input.photoDataUri) {
-        const responseText = "I can help you with your health questions. Please describe your symptoms or show me a medicine.";
-        return {
-            success: true,
-            data: { text: responseText }
-        }
+      return {
+        success: true,
+        data: { text: "Hi — I can help. Describe your symptoms or upload a medicine image to get started." },
+      };
     }
 
-    // Step 2: Main logic based on inputs
+    // 3) If photo provided -> identify medicine + authenticity
     if (input.photoDataUri) {
-      // Case 1: Photo is provided.
+      if (!isValidDataUri(input.photoDataUri)) {
+        return { success: false, error: 'Invalid photo data.' };
+      }
+
       const [identification, authenticity] = await Promise.all([
-        identifyMedicineFromImage({ photoDataUri: input.photoDataUri }),
-        detectFakeOrExpiredMedicine({ photoDataUri: input.photoDataUri }),
+        withTimeout(identifyMedicineFromImage({ photoDataUri: input.photoDataUri }), AI_TIMEOUT_MS),
+        withTimeout(detectFakeOrExpiredMedicine({ photoDataUri: input.photoDataUri }), AI_TIMEOUT_MS),
       ]);
 
+      // If user also provided symptoms (either via text or transcribed audio)
       if (userQuery) {
-        // Subcase 1.1: Photo AND symptoms provided. Give full guidance.
-         const guidance = await getPersonalizedHealthGuidance({
-          age: input.userDetails?.age || 30, // Default age
-          gender: input.userDetails?.gender || 'other', // Default gender
-          symptoms: userQuery,
-          medicineName: identification.medicineName,
-          medicineUsage: identification.usage,
-        });
+        // Ensure age/gender are non-undefined and valid for the personalized flow:
+        const ageForGuidance = input.userDetails?.age ?? 30; // sensible default if missing
+        const genderForGuidance = input.userDetails?.gender ?? 'other';
 
-        const responseText = `⚠️ I am not a real doctor. This is for advice only. \n\nBased on my analysis of ${identification.medicineName} and your symptoms, here is my guidance. Authenticity: ${authenticity.isFakeOrExpired ? authenticity.reason : 'This medicine appears to be authentic and not expired.'}. Suitability: ${guidance.suitability}. Potential Side Effects: ${guidance.sideEffects}. Warnings: ${guidance.warnings}. ${guidance.alternatives ? `\nAlternatives: ${guidance.alternatives}`: ''}`;
-        return {
-            success: true,
-            data: { text: responseText }
-        }
-      } else {
-        // Subcase 1.2: Only photo provided. Identify and ask for more info.
-        const responseText = `I've identified the medicine as ${identification.medicineName}. Its purpose is ${identification.usage}. For personalized guidance, please tell me your symptoms.`;
-        return {
-            success: true,
-            data: { text: responseText }
-        }
+        const guidance = await withTimeout(
+          getPersonalizedHealthGuidance({
+            age: ageForGuidance,
+            gender: genderForGuidance,
+            symptoms: userQuery,
+            medicineName: identification?.medicineName ?? '',
+            medicineUsage: identification?.usage ?? '',
+          }),
+          AI_TIMEOUT_MS
+        );
+
+        const text = [
+          '⚠️ Disclaimer: I am not a doctor. This is informational only.',
+          `Identified medicine: ${identification?.medicineName ?? 'Unknown'}.`,
+          `Purpose: ${identification?.usage ?? 'Unknown'}.`,
+          authenticity ? (authenticity.isFakeOrExpired ? `Authenticity check: ${authenticity.reason}` : 'Authenticity: Appears authentic/not expired.') : '',
+          guidance ? `Guidance: ${guidance.suitability ?? 'N/A'}` : '',
+          guidance?.alternatives ? `Alternatives: ${guidance.alternatives}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+
+        return { success: true, data: { text } };
       }
-    } else if (userQuery) {
-      // Case 2: No photo, but symptoms are provided.
-      try {
-        const responseText = await generalHealthQuery({
+
+      // only photo provided — ask for more details
+      return {
+        success: true,
+        data: { text: `I found ${identification?.medicineName ?? 'a medicine'}. Tell me your age, gender, and symptoms for personalized advice.` },
+      };
+    }
+
+    // 4) No photo, but userQuery exists -> general health response
+    if (userQuery) {
+      const responseText = await withTimeout(
+        generalHealthQuery({
           symptoms: userQuery,
           age: input.userDetails?.age,
           gender: input.userDetails?.gender,
-          userLang: input.userLang
-        });
-         return { success: true, data: { text: responseText } };
-      } catch (e) {
-         console.error(e);
-        return { success: false, error: 'An unexpected error occurred.'}
-      }
-
-    } else {
-      // Case 3: No photo and no symptoms. (Should be handled by the check at the top)
-      const responseText = "I can help you with your health questions. Please describe your symptoms or show me a medicine.";
-       return {
-            success: true,
-            data: { text: responseText }
-        }
+          userLang: input.userLang,
+        }),
+        AI_TIMEOUT_MS
+      );
+      return { success: true, data: { text: responseText } };
     }
-  } catch (error) {
-    console.error("Error in runHealthAdvisor:", error);
-    let userFriendlyError = "I'm sorry, I encountered an error and couldn't process your request. Please try again.";
 
-    if (error instanceof Error) {
-        if (error.message.includes('503') || error.message.includes('overloaded')) {
-            userFriendlyError = "The AI model is currently overloaded. Please wait a moment and try your request again.";
-        } else if (error.message) {
-            userFriendlyError = error.message;
-        }
-    }
-    
-    return {
-      success: false,
-      error: userFriendlyError,
-    };
+    // fallback
+    return { success: false, error: 'Could not process request: missing inputs.' };
+  } catch (err) {
+    console.error('runHealthAdvisor error:', err);
+    return { success: false, error: formatError(err) };
   }
 }
 
-export async function getAudioForText(text: string) {
-    if (!text) {
-        return { success: false, error: 'No text provided for speech synthesis.' };
-    }
-    try {
-        const ttsResponse = await textToSpeech(text);
-        return { 
-          success: true, 
-          data: {
-            audioDataUri: ttsResponse.media
-          }
-        };
-    } catch (error) {
-        console.error("Error in textToSpeech:", error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        return { success: false, error: errorMessage };
-    }
-}
-
-export async function getFoodInteractionGuide(input: MedicineFoodInteractionInput) {
-    try {
-        const result = await getMedicineFoodInteraction(input);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error("Error in getFoodInteractionGuide:", error);
-        let userFriendlyError = "I'm sorry, I couldn't process your request for food interactions. Please try again.";
-
-        if (error instanceof Error) {
-            if (error.message.includes('503') || error.message.includes('overloaded')) {
-                userFriendlyError = "The AI model is currently overloaded. Please wait a moment and try your request again.";
-            } else if (error.message) {
-                userFriendlyError = error.message;
-            }
-        }
-        return { success: false, error: userFriendlyError };
-    }
-}
-
-export async function analyzeCough(audioDataUri: string) {
-    try {
-        const result = await coughAnalysisFlow({ coughAudio: audioDataUri });
-        return { success: true, data: result };
-    } catch (error) {
-        console.error("Error in analyzeCough:", error);
-        let userFriendlyError = "I'm sorry, I couldn't process your cough analysis request. Please try again.";
-
-        if (error instanceof Error) {
-            if (error.message.includes('503') || error.message.includes('overloaded')) {
-                userFriendlyError = "The AI model is currently overloaded. Please wait a moment and try your request again.";
-            } else if (error.message) {
-                userFriendlyError = error.message;
-            }
-        }
-        return { success: false, error: userFriendlyError };
-    }
-}
-
-export async function runDebate(input: DebateInput) {
-    try {
-        const result = await debateFlow(input);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error("Error in runDebate:", error);
-        let userFriendlyError = "I'm sorry, I couldn't process your request for an AI debate. Please try again.";
-
-        if (error instanceof Error) {
-            if (error.message.includes('503') || error.message.includes('overloaded')) {
-                userFriendlyError = "The AI model is currently overloaded. Please wait a moment and try your request again.";
-            } else if (error.message) {
-                userFriendlyError = error.message;
-            }
-        }
-        return { success: false, error: userFriendlyError };
-    }
+/**
+ * getAudioForText - wrapper to produce TTS audio data
+ * Signature: getAudioForText({ text, lang })
+ */
+export async function getAudioForText({
+  text,
+  lang,
+}: {
+  text: string;
+  lang: string;
+}): Promise<{
+  success: boolean;
+  data?: { audioDataUri: string };
+  error?: string;
+}> {
+  try {
+    // This is a placeholder. In a real app, you might have a Next.js API route
+    // that calls your TTS flow. For simplicity here, we call the flow directly,
+    // but this breaks the client/server boundary if not structured carefully.
+    // The preferred way is an API route (`/api/tts`).
+    const result = await textToSpeech(text);
+    return { success: true, data: { audioDataUri: result.media } };
+  } catch (err) {
+    console.error('getAudioForText error', err);
+    return { success: false, error: formatError(err) };
+  }
 }
 
 
-export async function getEmotionFromMedia(input: DetectEmotionInput) {
-    try {
-        const result = await detectEmotion(input);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error("Error in getEmotionFromMedia:", error);
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while detecting emotion.";
-        return { success: false, error: errorMessage };
-    }
+/**
+ * getFoodInteractionGuide
+ */
+export async function getFoodInteractionGuide(input: MedicineFoodInteractionInput): Promise<ApiResponse<any>> {
+  try {
+    const result = await withTimeout(getMedicineFoodInteraction(input), AI_TIMEOUT_MS);
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('getFoodInteractionGuide error:', err);
+    return { success: false, error: formatError(err) };
+  }
 }
 
-export async function getAdviceForMood(input: GetMoodAdviceInput) {
-    try {
-        const result = await getMoodAdviceFlow(input);
-        return { success: true, data: result };
-    } catch (error) {
-        console.error("Error in getAdviceForMood:", error);
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while getting advice.";
-        return { success: false, error: errorMessage };
-    }
+/**
+ * analyzeCough
+ */
+export async function analyzeCough(audioDataUri: string): Promise<ApiResponse<any>> {
+  try {
+    if (!isValidDataUri(audioDataUri)) return { success: false, error: 'Invalid audio data for cough analysis.' };
+    const result = await withTimeout(coughAnalysisFlow({ coughAudio: audioDataUri }), AI_TIMEOUT_MS);
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('analyzeCough error:', err);
+    return { success: false, error: formatError(err) };
+  }
+}
+
+/**
+ * runDebate
+ */
+export async function runDebate(input: DebateInput): Promise<ApiResponse<any>> {
+  try {
+    const res = await withTimeout(debateFlow(input), AI_TIMEOUT_MS);
+    return { success: true, data: res };
+  } catch (err) {
+    console.error('runDebate error:', err);
+    return { success: false, error: formatError(err) };
+  }
+}
+
+/**
+ * getEmotionFromMedia
+ */
+export async function getEmotionFromMedia(input: DetectEmotionInput): Promise<ApiResponse<any>> {
+  try {
+    const res = await withTimeout(detectEmotion(input), AI_TIMEOUT_MS);
+    return { success: true, data: res };
+  } catch (err) {
+    console.error('getEmotionFromMedia error:', err);
+    return { success: false, error: formatError(err) };
+  }
+}
+
+/**
+ * getAdviceForMood
+ */
+export async function getAdviceForMood(input: GetMoodAdviceInput): Promise<ApiResponse<any>> {
+  try {
+    const res = await withTimeout(getMoodAdviceFlow(input), AI_TIMEOUT_MS);
+    return { success: true, data: res };
+  } catch (err) {
+    console.error('getAdviceForMood error:', err);
+    return { success: false, error: formatError(err) };
+  }
 }
