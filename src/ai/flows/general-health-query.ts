@@ -12,8 +12,8 @@ import {z} from 'genkit';
 
 const GeneralHealthQueryInputSchema = z.object({
   symptoms: z.string().describe("A description of the user's symptoms."),
-  age: z.number().optional().describe('The age of the user in years.'),
-  gender: z.enum(['male', 'female', 'other']).optional().describe('The gender of the user.'),
+  age: z.number().optional().nullable().describe('The age of the user in years.'),
+  gender: z.enum(['male', 'female', 'other']).optional().nullable().describe('The gender of the user.'),
   userLang: z.string().optional().describe('The language the user is speaking in (e.g. Urdu, Punjabi, Pashto, Sindhi, Balochi, Siraiki).'),
 });
 export type GeneralHealthQueryInput = z.infer<typeof GeneralHealthQueryInputSchema>;
