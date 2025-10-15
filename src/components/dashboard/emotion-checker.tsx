@@ -132,19 +132,19 @@ export default function EmotionChecker() {
             return;
         }
 
-        const emotionResponse = await getEmotionFromMedia({ mediaUri });
+        const emotionResponse = await getEmotionFromMedia({ selfieDataUri: mediaUri, userLang: 'ur' });
         if (emotionResponse.success && emotionResponse.data) {
             setDetectedEmotion(emotionResponse.data.emotion as Emotion);
-            const adviceResponse = await getAdviceForMood({ emotion: emotionResponse.data.emotion as Emotion });
+            const adviceResponse = await getAdviceForMood({ emotion: emotionResponse.data.emotion as Emotion, user_lang: 'ur' });
             if (adviceResponse.success && adviceResponse.data) {
                 setAdvice(adviceResponse.data);
                 setStatus('result');
             } else {
-                 toast({ variant: 'destructive', title: 'Could not get advice', description: adviceResponse.error });
+                 toast({ variant: 'destructive', title: 'Could not get advice', description: "The advice could not be retrieved." });
                  setStatus('idle');
             }
         } else {
-             toast({ variant: 'destructive', title: 'Analysis Failed', description: emotionResponse.error });
+             toast({ variant: 'destructive', title: 'Analysis Failed', description: "The analysis failed to complete." });
              setStatus('idle');
         }
     };

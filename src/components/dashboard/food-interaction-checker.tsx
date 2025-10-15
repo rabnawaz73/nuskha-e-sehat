@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getFoodInteractionGuide } from '@/app/dashboard/actions';
 import type { MedicineFoodInteractionOutput } from '@/ai/flows/get-medicine-food-interaction';
 import { Skeleton } from '../ui/skeleton';
-import { Badge } from '../ui/badge';
+import { Badge, badgeVariants } from '../ui/badge';
 import {
   Tooltip,
   TooltipContent,
@@ -66,13 +66,13 @@ export default function FoodInteractionChecker() {
     const response = await getFoodInteractionGuide(values);
     setIsLoading(false);
 
-    if (response.success) {
+    if (response.success && response.data) {
       setResult(response.data as MedicineFoodInteractionOutput);
     } else {
       toast({
         variant: 'destructive',
         title: 'An error occurred',
-        description: response.error,
+        description: "The food interaction guide could not be retrieved.",
       });
     }
   };
@@ -87,7 +87,7 @@ export default function FoodInteractionChecker() {
             <h4 className="font-bold font-body">{title}</h4>
              <TooltipProvider>
                 <div className="flex flex-wrap gap-2">
-                {items.map((item, index) => (
+                {items.map((item: any, index: number) => (
                      <Tooltip key={index}>
                         <TooltipTrigger asChild>
                             <Badge variant={variant} className="text-lg cursor-pointer flex gap-2">
@@ -203,16 +203,3 @@ export default function FoodInteractionChecker() {
     </div>
   );
 }
-
-// Add a warning variant to the badge component
-declare module "@/components/ui/badge" {
-    interface BadgeProps {
-      variant?: "default" | "secondary" | "destructive" | "outline" | "warning";
-    }
-}
-
-import { badgeVariants } from '@/components/ui/badge';
-badgeVariants.getVariants = () => ({
-    ...badgeVariants.getVariants(),
-    warning: "border-transparent bg-yellow-400 text-yellow-900 hover:bg-yellow-400/80",
-});

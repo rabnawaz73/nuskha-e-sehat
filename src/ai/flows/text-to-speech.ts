@@ -8,6 +8,11 @@ import { z } from 'genkit';
 import wav from 'wav';
 import { googleAI } from '@genkit-ai/googleai';
 
+const TextToSpeechInputSchema = z.object({
+  text: z.string(),
+  lang: z.string().optional(),
+});
+
 const TextToSpeechOutputSchema = z.object({
   media: z.string().describe('The base64 encoded WAV audio data URI.'),
 });
@@ -42,21 +47,21 @@ async function toWav(
 export const textToSpeech = ai.defineFlow(
     {
       name: 'textToSpeech',
-      inputSchema: z.string(),
+      inputSchema: TextToSpeechInputSchema,
       outputSchema: TextToSpeechOutputSchema,
     },
-    async (query) => {
+    async (input) => {
       const { media } = await ai.generate({
         model: googleAI.model('gemini-2.5-flash-preview-tts'),
         config: {
           responseModalities: ['AUDIO'],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Algenib' },
+              prebuiltVoiceConfig: { voiceName: 'Algenib' }, // Assuming Algenib is multi-lingual for now
             },
           },
         },
-        prompt: query,
+        prompt: input.text,
       });
       if (!media) {
         throw new Error('no media returned');
