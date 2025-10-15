@@ -10,8 +10,9 @@ import {
     GetMoodAdviceInputSchema,
     GetMoodAdviceOutputSchema,
     type GetMoodAdviceInput,
-    type GetMoodAdviceOutput
 } from '@/ai/types/emotion';
+
+export type { GetMoodAdviceOutput } from '@/ai/types/emotion';
 
 
 const prompt = ai.definePrompt({
@@ -37,7 +38,7 @@ export const getMoodAdviceFlow = ai.defineFlow(
     inputSchema: GetMoodAdviceInputSchema,
     outputSchema: GetMoodAdviceOutputSchema,
   },
-  async (input): Promise<GetMoodAdviceOutput> => {
+  async (input): Promise<any> => {
     const { output } = await prompt(input);
     return output!;
   }

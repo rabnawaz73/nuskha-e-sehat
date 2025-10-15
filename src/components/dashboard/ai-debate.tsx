@@ -120,7 +120,7 @@ export default function AiDebate() {
   const handleFormSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
     setResult(null);
-    const response = await runDebate(values);
+    const response = await runDebate({ ...values, user_lang: 'ur', age_bracket: '25-35' });
     setIsLoading(false);
 
     if (response.success && response.data) {
@@ -129,7 +129,7 @@ export default function AiDebate() {
       toast({
         variant: 'destructive',
         title: 'An error occurred',
-        description: response.error,
+        description: "The debate could not be started.",
       });
     }
   };

@@ -18,13 +18,7 @@ import type { DebateInput } from '@/ai/types/debate';
 import { detectEmotion } from '@/ai/flows/detect-emotion-flow';
 import { getMoodAdviceFlow } from '@/ai/flows/get-mood-advice-flow';
 import type { DetectEmotionInput, GetMoodAdviceInput } from '@/ai/types/emotion';
-
-/**
- * Central API response shape used across server actions.
- */
-export type ApiResponse<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+import { HealthAdvisorInputSchema, type HealthAdvisorInput, type ApiResponse } from './types';
 
 /**
  * Timeout helper for long-running AI calls.
@@ -71,22 +65,6 @@ function isValidDataUri(value?: unknown) {
 const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
 const AI_TIMEOUT_MS = 35_000;
 
-/* ----------------------------
-   Input schemas (zod)
-   ---------------------------- */
-export const HealthAdvisorInputSchema = z.object({
-  audioDataUri: z.string().optional().describe("Base64 data URI for audio."),
-  textQuery: z.string().trim().optional(),
-  photoDataUri: z.string().optional().describe("Base64 data URI for an image."),
-  userDetails: z
-    .object({
-      age: z.coerce.number().optional(),
-      gender: z.enum(['male', 'female', 'other']).optional(),
-    })
-    .optional(),
-  userLang: z.string().optional(),
-});
-export type HealthAdvisorInput = z.infer<typeof HealthAdvisorInputSchema>;
 
 /* ----------------------------
    Public server action functions
@@ -324,9 +302,9 @@ export async function runHealthAdvisor(inputRaw: unknown): Promise<ApiResponse<{
 /**
  * getAudioForText - wrapper to produce TTS audio data
  */
-export async function getAudioForText({ text }: { text: string; }): Promise<ApiResponse<{ audioDataUri: string }>> {
+export async function getAudioForText({ text, lang }: { text: string; lang: string; }): Promise<ApiResponse<{ audioDataUri: string }>> {
   try {
-    const result = await textToSpeech(text);
+    const result = await textToSpeech({text, lang});
     return { success: true, data: { audioDataUri: result.media } };
   } catch (err) {
     console.error('getAudioForText error', err);

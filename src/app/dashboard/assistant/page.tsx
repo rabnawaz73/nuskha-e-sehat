@@ -67,7 +67,7 @@ export default function VoiceAssistantPage() {
       let uri = msg.audioDataUri;
       if (!uri) {
         const res = await getAudioForText({ text: msg.text, lang: selectedLang });
-        if (!res.success) throw new Error(res.error || "TTS failed");
+        if (!res.success) throw new Error("TTS failed");
         uri = res.data?.audioDataUri;
         // update message with uri
         setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, audioDataUri: uri } : m)));
@@ -111,7 +111,7 @@ export default function VoiceAssistantPage() {
         const msgForAudio: Message = { id: assistantId, role: "assistant", text: resp.data.text, timestamp: new Date().toISOString() };
         playAudioForMessage(msgForAudio);
       } else {
-        const errorText = resp.error || "Assistant error";
+        const errorText = "Assistant error";
         setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, text: errorText, isStreaming: false } : m)));
       }
     } catch (err: any) {

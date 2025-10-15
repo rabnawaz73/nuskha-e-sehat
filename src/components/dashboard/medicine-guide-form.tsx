@@ -198,7 +198,7 @@ export default function MedicineGuideForm({ onSubmit, isLoading }: MedicineGuide
         toast({
           variant: 'destructive',
           title: 'Transcription Failed',
-          description: response.error || 'Could not transcribe the audio.',
+          description: "The transcription failed to complete.",
         });
       }
     };

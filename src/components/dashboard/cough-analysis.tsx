@@ -159,7 +159,7 @@ export default function CoughAnalysis() {
                 toast({
                     variant: 'destructive',
                     title: 'Analysis Failed',
-                    description: response.error || 'Could not analyze the audio.'
+                    description: 'Could not analyze the audio.'
                 });
                 setStatus('idle');
             }

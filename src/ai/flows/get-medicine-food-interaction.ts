@@ -13,6 +13,7 @@ import {
     type MedicineFoodInteractionOutput
 } from '@/ai/types/medicine-food-interaction';
 
+export type { MedicineFoodInteractionOutput } from '@/ai/types/medicine-food-interaction';
 
 const prompt = ai.definePrompt({
   name: 'medicineFoodInteractionPrompt',
